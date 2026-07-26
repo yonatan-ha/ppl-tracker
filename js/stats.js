@@ -274,12 +274,12 @@ function liftCount(history, name) {
   return (history.get(name) || []).filter((e) => MAIN_TYPES.includes(e.type)).length;
 }
 
-/* The last N Monday-started weeks, oldest first. */
+/* The last N Sunday-started weeks, oldest first. */
 function lastWeeks(n) {
   const out = [];
-  const thisMonday = weekStart(new Date());
+  const thisSunday = weekStart(new Date());
   for (let i = n - 1; i >= 0; i--) {
-    const start = new Date(thisMonday.getFullYear(), thisMonday.getMonth(), thisMonday.getDate() - i * 7);
+    const start = new Date(thisSunday.getFullYear(), thisSunday.getMonth(), thisSunday.getDate() - i * 7);
     const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6);
     out.push({
       startISO: isoDate(start),

@@ -223,11 +223,11 @@ export function parseISO(s) {
   return new Date(y, m - 1, d);
 }
 
-/* Monday-based week start. */
+/* Sunday-based week start — weeks run Sunday through Saturday, matching the
+   calendar grid. Everything weekly (stats, streaks, targets) keys off this. */
 export function weekStart(d) {
   const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const dow = (x.getDay() + 6) % 7; // Mon = 0
-  x.setDate(x.getDate() - dow);
+  x.setDate(x.getDate() - x.getDay()); // Sun = 0
   return x;
 }
 

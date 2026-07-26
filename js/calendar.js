@@ -8,7 +8,7 @@ import { esc, icon, pickSheet } from './ui.js';
 import { go } from './app.js';
 import { startLogFlow } from './editor.js';
 
-const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 // Which month is on screen; survives navigation within the session.
 let cursor = new Date();
@@ -21,9 +21,9 @@ export function renderCalendar(view) {
   const byDate = sessionsByDate();
   const today = todayISO();
 
-  // Grid starts on the Monday of the week containing the 1st.
+  // Grid starts on the Sunday of the week containing the 1st.
   const first = new Date(year, month, 1);
-  const lead = (first.getDay() + 6) % 7;
+  const lead = first.getDay();
   const gridStart = new Date(year, month, 1 - lead);
 
   const cells = [];
@@ -137,9 +137,9 @@ function monthRail(monthLifts) {
     </div>`;
 }
 
-function liftsInWeek(monday) {
-  const start = isoDate(monday);
-  const endDate = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6);
+function liftsInWeek(sunday) {
+  const start = isoDate(sunday);
+  const endDate = new Date(sunday.getFullYear(), sunday.getMonth(), sunday.getDate() + 6);
   const end = isoDate(endDate);
   return state.sessions.filter(
     (s) => MAIN_TYPES.includes(s.type) && s.date >= start && s.date <= end
@@ -147,13 +147,13 @@ function liftsInWeek(monday) {
 }
 
 /* Consecutive past weeks that met the target. The current week only counts once
-   it's actually met, so a fresh Monday never wipes the number out. */
+   it's actually met, so a fresh Sunday never wipes the number out. */
 function weekStreak(target) {
   let streak = 0;
-  const monday = weekStart(new Date());
-  if (liftsInWeek(monday) >= target) streak++;
+  const sunday = weekStart(new Date());
+  if (liftsInWeek(sunday) >= target) streak++;
   for (let i = 1; i <= 104; i++) {
-    const back = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() - i * 7);
+    const back = new Date(sunday.getFullYear(), sunday.getMonth(), sunday.getDate() - i * 7);
     if (liftsInWeek(back) >= target) streak++;
     else break;
   }

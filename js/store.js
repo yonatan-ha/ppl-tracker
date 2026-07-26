@@ -404,15 +404,24 @@ export function sessionFromTemplate(tpl, date) {
     templateId: tpl ? tpl.id : null,
     templateName: tpl ? tpl.name : null,
     notes: '',
-    exercises: (tpl ? tpl.exercises : []).map((te) => prefillExercise(te, date))
+    exercises: (tpl ? tpl.exercises : []).map((te) => prefillExercise(te, date, tpl ? tpl.type : 'push'))
   };
 }
 
-export function prefillExercise(te, date) {
+/* How many blank set rows a brand-new exercise opens with. Lifting days start
+   at two because that's the fewest you'd ever log; abs and cardio start at one. */
+export function defaultSetCount(type) {
+  return MAIN_TYPES.includes(type) ? 2 : 1;
+}
+
+export function prefillExercise(te, date, type) {
   const last = lastPerformance(te.name, date);
-  const sets = last && last.sets.length
-    ? last.sets.map((s) => ({ id: uid(), reps: s.reps, weight: s.weight }))
-    : [{ id: uid(), reps: '', weight: '' }];
+  if (last && last.sets.length) {
+    // Done before: mirror exactly what you did last time.
+    return { id: uid(), name: te.name, sets: last.sets.map((s) => ({ id: uid(), reps: s.reps, weight: s.weight })) };
+  }
+  const sets = [];
+  for (let i = 0; i < defaultSetCount(type); i++) sets.push({ id: uid(), reps: '', weight: '' });
   return { id: uid(), name: te.name, sets };
 }
 

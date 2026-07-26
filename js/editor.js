@@ -199,7 +199,7 @@ export function renderEditor(view, sessionId, params) {
       const name = await pickExerciseSheet({ type: s.type, title: 'Add exercise' });
       if (!name) return;
       rememberExercise(name, s.type);
-      s.exercises.push(prefillExercise({ name }, s.date));
+      s.exercises.push(prefillExercise({ name }, s.date, s.type));
       touch(); paint();
     });
 

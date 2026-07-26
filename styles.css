@@ -408,22 +408,25 @@ svg { display: block; }
 button.pill { min-height: 34px; padding: 7px 14px; }
 button.pill:active { transform: scale(.94); }
 
-/* streak / weekly-goal cards beside the month (Kinetic's right rail) */
-.month-rail { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 14px 16px 0; }
+/* streak / weekly-goal cards beside the month (Kinetic's right rail).
+   Always one row of three — these are meant to be scanned in a single glance. */
+.month-rail { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 14px 16px 0; }
 .rail-card {
   background: var(--card); border: 1px solid var(--border-soft);
-  border-radius: var(--r-lg); padding: 14px;
+  border-radius: var(--r-lg); padding: 12px 10px; min-width: 0;
 }
 .rail-card.lit { border-color: var(--accent); box-shadow: var(--glow-primary); }
 .rail-card .rc-label {
-  font-family: var(--font-display); font-size: 11px; font-weight: 600;
-  letter-spacing: var(--tracking-wide); text-transform: uppercase; color: var(--dimmer);
+  font-family: var(--font-display); font-size: 10px; font-weight: 600;
+  letter-spacing: .06em; text-transform: uppercase; color: var(--dimmer);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .rail-card.lit .rc-label { color: var(--accent-2); }
 .rail-card .rc-value {
-  font-family: var(--font-mono); font-size: 26px; color: var(--text); margin-top: 4px; line-height: 1.1;
+  font-family: var(--font-mono); font-size: 22px; color: var(--text);
+  margin-top: 3px; line-height: 1.1; white-space: nowrap;
 }
-.rail-card .rc-value small { font-size: 12px; color: var(--dimmer); }
+.rail-card .rc-value small { font-size: 11px; color: var(--dimmer); }
 
 /* ---------------- sheets ---------------- */
 
@@ -783,6 +786,10 @@ button.list-row:active { background: var(--card); }
 
 @media (max-width: 359px) {
   .pad { padding: 0 12px; }
+  .month-rail { padding-left: 12px; padding-right: 12px; gap: 6px; }
+  .rail-card { padding: 10px 8px; }
+  .rail-card .rc-value { font-size: 19px; }
+  .rail-card .rc-value small { font-size: 10px; }
   .cal-grid, .cal-dow { padding-left: 8px; padding-right: 8px; gap: 4px; }
   .cal-day { min-height: 64px; }
   .screen-title { font-size: 22px; }
@@ -795,7 +802,11 @@ button.list-row:active { background: var(--card); }
   #tabbar { max-width: 640px; left: 50%; transform: translateX(-50%); }
   .cal-day { min-height: 92px; }
   .evt-main { font-size: 11px; min-height: 21px; }
-  .month-rail { grid-template-columns: repeat(3, 1fr); }
+  .month-rail { gap: 10px; }
+  .rail-card { padding: 14px; }
+  .rail-card .rc-label { font-size: 11px; letter-spacing: var(--tracking-wide); }
+  .rail-card .rc-value { font-size: 26px; }
+  .rail-card .rc-value small { font-size: 12px; }
 }
 
 /* Desktop: Kinetic's 76px icon rail. */

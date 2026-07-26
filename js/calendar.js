@@ -132,7 +132,7 @@ function monthRail(monthLifts) {
       </div>
       <div class="rail-card">
         <div class="rc-label">Month</div>
-        <div class="rc-value">${monthLifts}<small> sessions</small></div>
+        <div class="rc-value">${monthLifts}</div>
       </div>
     </div>`;
 }

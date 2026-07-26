@@ -5,7 +5,7 @@ import {
   num, weekStart, isoDate, parseISO, MAIN_TYPES, TYPE_LABEL
 } from './store.js';
 import { esc, icon, compact, fmtNum, pickSheet } from './ui.js';
-import { lineChart, barChart, wireChartTaps } from './charts.js';
+import { lineChart, barChart, progressRing, wireChartTaps } from './charts.js';
 
 const WEEKS = 12;
 const VOLUME_FILTERS = ['all', 'push', 'pull', 'legs', 'abs'];
@@ -57,6 +57,7 @@ function paintStats(view, sessions) {
 
   view.innerHTML = `
     <header class="screen-head"><div class="screen-title">Stats<small>${sessions.length} sessions logged</small></div></header>
+    <div class="pad" style="padding-bottom:14px">${ringsPanel(sessions, weeks)}</div>
     <div class="pad stack stats-grid" style="gap:14px">
       ${exercisePanel(history)}
       ${volumePanel(sessions, weeks)}
@@ -80,12 +81,51 @@ function paintStats(view, sessions) {
   wireChartTaps(view);
 }
 
+/* ---------------- rings: the at-a-glance row ---------------- */
+
+function ringsPanel(sessions, weeks) {
+  const target = state.settings.weeklyTarget || 5;
+
+  const inWeek = (w) => sessions.filter(
+    (s) => MAIN_TYPES.includes(s.type) && s.date >= w.startISO && s.date <= w.endISO).length;
+
+  const thisWeek = inWeek(weeks[weeks.length - 1]);
+  const weekPct = Math.min(100, (thisWeek / target) * 100);
+
+  // Consistency: how many of the last 12 weeks met the target.
+  const met = weeks.filter((w) => inWeek(w) >= target).length;
+  const consistency = (met / weeks.length) * 100;
+
+  // Volume trend: this week against the 12-week average, capped at 100.
+  const vols = weeks.map((w) => sessions
+    .filter((s) => s.date >= w.startISO && s.date <= w.endISO)
+    .reduce((t, s) => t + sessionVolume(s), 0));
+  const active = vols.filter((v) => v > 0);
+  const avgVol = active.length ? active.reduce((a, b) => a + b, 0) / active.length : 0;
+  const volPct = avgVol ? Math.min(100, (vols[vols.length - 1] / avgVol) * 100) : 0;
+
+  const cards = [
+    { label: `Week · ${thisWeek}/${target}`, value: weekPct },
+    { label: `Consistency · ${met}/${weeks.length}`, value: consistency },
+    { label: 'Volume vs avg', value: volPct }
+  ];
+
+  return `
+    <div class="rings">
+      ${cards.map((c) => `
+        <div class="ring-card">
+          ${progressRing(c.value)}
+          <div class="ring-label">${esc(c.label)}</div>
+        </div>`).join('')}
+    </div>`;
+}
+
 /* ---------------- panel 1: per exercise ---------------- */
 
 function exercisePanel(history) {
   const entries = history.get(selectedExercise) || [];
   const isCardio = entries.length && entries[entries.length - 1].type === 'cardio';
-  const color = `var(--${isCardio ? 'cardio' : 'push'}-solid)`;
+  const color = isCardio ? 'var(--slate-300)' : 'var(--accent)';
 
   // Cardio progresses in minutes; everything else in top-set load.
   const points = entries.map((e) => {
@@ -137,7 +177,10 @@ function exercisePanel(history) {
 /* ---------------- panel 2: volume ---------------- */
 
 function volumePanel(sessions, weeks) {
-  const color = volumeFilter === 'all' ? 'var(--accent)' : `var(--${volumeFilter}-solid)`;
+  const TYPE_SOLID = {
+    push: 'var(--red-500)', pull: 'var(--blue-500)', legs: 'var(--amber-400)', abs: 'var(--green-500)'
+  };
+  const color = volumeFilter === 'all' ? 'var(--accent)' : TYPE_SOLID[volumeFilter];
 
   const bars = weeks.map((w) => {
     const inWeek = sessions
@@ -180,7 +223,10 @@ function frequencyPanel(sessions, weeks) {
     return {
       label: w.label,
       value: lifts,
-      segments: MAIN_TYPES.map((t) => ({ value: counts[t], color: `var(--${t}-solid)` })),
+      segments: MAIN_TYPES.map((t) => ({
+        value: counts[t],
+        color: { push: 'var(--red-500)', pull: 'var(--blue-500)', legs: 'var(--amber-400)' }[t]
+      })),
       cap: `Week of ${w.label} · ${lifts}/${target} lifting · ${MAIN_TYPES.map((t) => `${counts[t]} ${TYPE_LABEL[t]}`).join(', ')}${extras ? ` · +${counts.abs} abs, ${counts.cardio} cardio` : ''}`
     };
   });

@@ -1,7 +1,9 @@
 /* Month calendar: Notion-style event blocks.
    Lifting days get the big block; abs and cardio get their own smaller ones. */
 
-import { sessionsByDate, isoDate, todayISO, TYPES, MAIN_TYPES, TYPE_LABEL } from './store.js';
+import {
+  state, sessionsByDate, isoDate, todayISO, weekStart, TYPES, MAIN_TYPES, TYPE_LABEL
+} from './store.js';
 import { esc, icon, pickSheet } from './ui.js';
 import { go } from './app.js';
 import { startLogFlow } from './editor.js';
@@ -45,8 +47,13 @@ export function renderCalendar(view) {
       ? list.map((s) => s.templateName || TYPE_LABEL[s.type]).join(', ')
       : 'no workout — tap to log';
 
+    // The cell itself takes the colour of the day's primary workout, so a month
+    // reads as a constellation of lit tiles before you read a single word.
+    const lead = list[0];
+    const lit = lead ? ` has-workout c-${lead.type}` : '';
+
     cells.push(`
-      <button class="cal-day${inMonth ? '' : ' out'}${iso === today ? ' today' : ''}" data-date="${iso}"
+      <button class="cal-day${inMonth ? '' : ' out'}${lit}${iso === today ? ' today' : ''}" data-date="${iso}"
               aria-label="${esc(d.toLocaleDateString(undefined, { day: 'numeric', month: 'long' }) + ': ' + label)}">
         <span class="cal-num">${d.getDate()}</span>
         ${blocks}
@@ -72,6 +79,8 @@ export function renderCalendar(view) {
       <button class="icon-btn" data-next aria-label="Next month">${icon('chev')}</button>
       <button class="icon-btn hide-desktop" data-settings aria-label="Settings">${icon('gear')}</button>
     </header>
+
+    ${monthRail(lifts)}
 
     <div class="cal-summary">
       ${TYPES.filter((t) => MAIN_TYPES.includes(t) || counts[t])
@@ -102,6 +111,53 @@ export function renderCalendar(view) {
   });
 
   attachSwipe(view.querySelector('.cal-grid'), view);
+}
+
+/* Kinetic's right-hand stat rail, adapted to a 5x/week split: how this week is
+   going, how many weeks you've hit target back to back, and the month total. */
+function monthRail(monthLifts) {
+  const target = state.settings.weeklyTarget || 5;
+  const thisWeek = liftsInWeek(weekStart(new Date()));
+  const streak = weekStreak(target);
+
+  return `
+    <div class="month-rail">
+      <div class="rail-card${thisWeek >= target ? ' lit' : ''}">
+        <div class="rc-label">This week</div>
+        <div class="rc-value">${thisWeek}<small> / ${target}</small></div>
+      </div>
+      <div class="rail-card${streak > 0 ? ' lit' : ''}">
+        <div class="rc-label">Streak</div>
+        <div class="rc-value">${streak}<small> ${streak === 1 ? 'wk' : 'wks'}</small></div>
+      </div>
+      <div class="rail-card">
+        <div class="rc-label">Month</div>
+        <div class="rc-value">${monthLifts}<small> sessions</small></div>
+      </div>
+    </div>`;
+}
+
+function liftsInWeek(monday) {
+  const start = isoDate(monday);
+  const endDate = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6);
+  const end = isoDate(endDate);
+  return state.sessions.filter(
+    (s) => MAIN_TYPES.includes(s.type) && s.date >= start && s.date <= end
+  ).length;
+}
+
+/* Consecutive past weeks that met the target. The current week only counts once
+   it's actually met, so a fresh Monday never wipes the number out. */
+function weekStreak(target) {
+  let streak = 0;
+  const monday = weekStart(new Date());
+  if (liftsInWeek(monday) >= target) streak++;
+  for (let i = 1; i <= 104; i++) {
+    const back = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() - i * 7);
+    if (liftsInWeek(back) >= target) streak++;
+    else break;
+  }
+  return streak;
 }
 
 function isCurrentMonth() {

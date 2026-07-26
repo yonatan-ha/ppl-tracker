@@ -17,14 +17,14 @@ export function brandMarkSVG() {
     <svg viewBox="0 0 48 48" role="img" aria-label="PPL">
       <defs>
         <linearGradient id="ppl-brand" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stop-color="var(--accent)"/>
-          <stop offset="1" stop-color="var(--accent-2)"/>
+          <stop offset="0" stop-color="var(--blue-600)"/>
+          <stop offset="1" stop-color="var(--cyan-400)"/>
         </linearGradient>
       </defs>
-      <rect x="1.5" y="1.5" width="45" height="45" rx="12.5" fill="url(#ppl-brand)"/>
-      <rect x="11" y="14"   width="26" height="5.4" rx="2.7" fill="var(--accent-ink)" opacity=".95"/>
-      <rect x="11" y="21.3" width="20" height="5.4" rx="2.7" fill="var(--accent-ink)" opacity=".78"/>
-      <rect x="11" y="28.6" width="26" height="5.4" rx="2.7" fill="var(--accent-ink)" opacity=".95"/>
+      <rect x="1.5" y="1.5" width="45" height="45" rx="11" fill="url(#ppl-brand)"/>
+      <rect x="11" y="14"   width="26" height="5.4" rx="1.4" fill="var(--on-accent)" opacity=".95"/>
+      <rect x="11" y="21.3" width="17" height="5.4" rx="1.4" fill="var(--on-accent)" opacity=".72"/>
+      <rect x="11" y="28.6" width="26" height="5.4" rx="1.4" fill="var(--on-accent)" opacity=".95"/>
     </svg>`;
 }
 

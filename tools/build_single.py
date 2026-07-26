@@ -85,7 +85,9 @@ PWA_SHIM = """
 
 def build():
     os.makedirs(DIST, exist_ok=True)
-    css = read("styles.css")
+    # styles.css pulls the embedded fonts in with @import, which can't survive
+    # being inlined into a <style> block — splice the file in directly.
+    css = read("styles.css").replace("@import url('fonts.css');", read("fonts.css"))
     js = bundle_js()
     html = read("index.html")
 

@@ -1,11 +1,12 @@
 /* PPL Workout Tracker — offline shell cache.
    Bump CACHE when any shell file changes. */
-const CACHE = 'ppl-shell-v4';
+const CACHE = 'ppl-shell-v5';
 
 const SHELL = [
   './',
   './index.html',
   './styles.css',
+  './fonts.css',
   './manifest.webmanifest',
   './js/app.js',
   './js/storage.js',

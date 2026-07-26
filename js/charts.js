@@ -113,8 +113,8 @@ export function barChart(bars, { color = 'var(--accent)', target = null, targetL
 
   const targetLine = target ? `
     <line x1="${PAD.l}" y1="${scaleY(target).toFixed(1)}" x2="${W - PAD.r}" y2="${scaleY(target).toFixed(1)}"
-          stroke="var(--accent)" stroke-width="1.4" stroke-dasharray="4 3" opacity=".85"/>
-    <text x="${W - PAD.r}" y="${(scaleY(target) - 4).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--accent)" font-weight="700">${esc(targetLabel)}</text>` : '';
+          stroke="var(--accent-2)" stroke-width="1.4" stroke-dasharray="4 3" opacity=".9"/>
+    <text x="${W - PAD.r}" y="${(scaleY(target) - 4).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--accent-2)" font-weight="700">${esc(targetLabel)}</text>` : '';
 
   return `
     <svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
@@ -129,6 +129,27 @@ function emptyChart(msg) {
   return `
     <svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
       <text x="${W / 2}" y="${H / 2}" text-anchor="middle" font-size="12" fill="var(--dimmer)">${esc(msg)}</text>
+    </svg>`;
+}
+
+/* Kinetic progress ring: a glowing arc over a dark track, percentage in mono. */
+export function progressRing(value, size = 104) {
+  const pct = Math.max(0, Math.min(100, Math.round(value)));
+  const stroke = 9;
+  const r = (size - stroke - 2) / 2;
+  const c = 2 * Math.PI * r;
+  const offset = c - (pct / 100) * c;
+  const mid = size / 2;
+
+  return `
+    <svg viewBox="0 0 ${size} ${size}" role="img" aria-label="${pct} percent">
+      <g transform="rotate(-90 ${mid} ${mid})">
+        <circle class="ring-track" cx="${mid}" cy="${mid}" r="${r}" fill="none" stroke-width="${stroke}"/>
+        <circle class="ring-value" cx="${mid}" cy="${mid}" r="${r}" fill="none" stroke-width="${stroke}"
+                stroke-linecap="round" stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${offset.toFixed(1)}"/>
+      </g>
+      <text class="ring-text" x="${mid}" y="${mid}" text-anchor="middle" dominant-baseline="central"
+            font-size="${Math.round(size * 0.22)}">${pct}%</text>
     </svg>`;
 }
 

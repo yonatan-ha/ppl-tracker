@@ -11,11 +11,11 @@ import zlib
 
 OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "icons")
 
-# Brand mark: violet gradient tile with three bars, matching brandMarkSVG() in js/ui.js.
-GRAD_TOP = (124, 92, 246, 255)     # --accent
-GRAD_BOTTOM = (167, 96, 235, 255)  # --accent-2
-BAR = (252, 250, 255, 255)
-BAR_ALPHA = [242, 199, 242]        # long, short, long
+# Brand mark: Kinetic blue-to-cyan tile with three bars, matching brandMarkSVG().
+GRAD_TOP = (24, 119, 234, 255)     # --blue-600
+GRAD_BOTTOM = (90, 217, 255, 255)  # --cyan-400
+BAR = (3, 5, 10, 255)              # --black-950, the on-accent ink
+BAR_ALPHA = [242, 184, 242]        # long, short, long
 
 
 def rounded_rect_mask(size, radius):
@@ -43,7 +43,7 @@ def blend(dst, src, alpha):
 
 
 def make_icon(size, path, maskable_pad=0.0):
-    radius = size * 0.225
+    radius = size * 0.20
     mask = rounded_rect_mask(size, radius)
 
     # transparent canvas

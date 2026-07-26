@@ -1,10 +1,41 @@
-/* Small UI primitives: escaping, icons, toasts, bottom sheets. */
+/* UI primitives: escaping, icons, the brand mark, toasts, sheets, busy states. */
 
 export function esc(s) {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
+
+/* ---------------- brand ----------------
+   LOGO PLACEHOLDER — swap the SVG below for your own mark.
+   Keep the 0 0 48 48 viewBox and it will drop straight into the sidebar, the
+   setup screen and the boot splash at every size they use. The three bars echo
+   the Push / Pull / Legs blocks on the calendar. */
+
+export function brandMarkSVG() {
+  return `
+    <svg viewBox="0 0 48 48" role="img" aria-label="PPL">
+      <defs>
+        <linearGradient id="ppl-brand" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="var(--accent)"/>
+          <stop offset="1" stop-color="var(--accent-2)"/>
+        </linearGradient>
+      </defs>
+      <rect x="1.5" y="1.5" width="45" height="45" rx="12.5" fill="url(#ppl-brand)"/>
+      <rect x="11" y="14"   width="26" height="5.4" rx="2.7" fill="var(--accent-ink)" opacity=".95"/>
+      <rect x="11" y="21.3" width="20" height="5.4" rx="2.7" fill="var(--accent-ink)" opacity=".78"/>
+      <rect x="11" y="28.6" width="26" height="5.4" rx="2.7" fill="var(--accent-ink)" opacity=".95"/>
+    </svg>`;
+}
+
+/* Fills every [data-brand-mark] slot in the document. */
+export function paintBrandMarks(root = document) {
+  root.querySelectorAll('[data-brand-mark]').forEach((el) => {
+    if (!el.firstChild) el.innerHTML = brandMarkSVG();
+  });
+}
+
+/* ---------------- icons ---------------- */
 
 const ICON_PATHS = {
   back: '<path d="M15 19l-7-7 7-7"/>',
@@ -17,22 +48,58 @@ const ICON_PATHS = {
   edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4z"/>',
   check: '<path d="M20 6L9 17l-5-5"/>',
   copy: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 012-2h10"/>',
-  calendar: '<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/>'
+  calendar: '<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+  alert: '<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L2 18a2 2 0 001.7 3h16.6a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/>',
+  download: '<path d="M12 3v12M7 11l5 5 5-5M4 21h16"/>',
+  upload: '<path d="M12 16V4M7 9l5-5 5 5M4 21h16"/>'
 };
 
 export function icon(name, cls) {
   return `<svg viewBox="0 0 24 24" class="${cls || ''}" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICON_PATHS[name] || ''}</svg>`;
 }
 
-/* ---------------- toast ---------------- */
+/* ---------------- toasts ---------------- */
 
-let toastTimer = null;
-export function toast(msg) {
-  const el = document.getElementById('toast');
-  el.textContent = msg;
-  el.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
+/* toast('Saved')            neutral
+   toast('Saved', 'ok')      success
+   toast('Failed', 'error')  error — held on screen longer, it matters more */
+export function toast(message, kind = 'ok') {
+  const root = document.getElementById('toast-root');
+  if (!root) return;
+
+  const el = document.createElement('div');
+  el.className = `toast ${kind}`;
+  const glyph = kind === 'error' ? 'alert' : kind === 'ok' ? 'check' : '';
+  el.innerHTML = `${glyph ? icon(glyph) : ''}<span>${esc(message)}</span>`;
+  root.appendChild(el);
+
+  // Never stack more than three; the oldest goes first.
+  while (root.children.length > 3) root.firstChild.remove();
+
+  const life = kind === 'error' ? 4200 : 2300;
+  setTimeout(() => {
+    el.classList.add('out');
+    setTimeout(() => el.remove(), 220);
+  }, life);
+}
+
+/* ---------------- busy state ---------------- */
+
+/* Wraps a real async action: the button shows a spinner and stops accepting
+   taps until the work settles. Never used to fake latency. */
+export async function withBusy(button, label, work) {
+  if (!button) return work();
+  const original = button.innerHTML;
+  button.classList.add('is-busy');
+  button.setAttribute('aria-busy', 'true');
+  button.innerHTML = `<span class="spinner"></span><span>${esc(label || 'Working…')}</span>`;
+  try {
+    return await work();
+  } finally {
+    button.classList.remove('is-busy');
+    button.removeAttribute('aria-busy');
+    button.innerHTML = original;
+  }
 }
 
 /* ---------------- bottom sheet ---------------- */
@@ -44,7 +111,7 @@ export function openSheet({ title, bodyHTML, onMount, headRight }) {
   const root = document.getElementById('sheet-root');
   root.innerHTML = `
     <div class="scrim" data-scrim>
-      <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet" role="dialog" aria-modal="true"${title ? ' aria-label="' + esc(title) + '"' : ''}>
         <div class="sheet-grab"></div>
         ${title ? `<div class="sheet-head"><h2>${esc(title)}</h2>${headRight || ''}</div>` : ''}
         <div class="sheet-body">${bodyHTML || ''}</div>
@@ -54,7 +121,15 @@ export function openSheet({ title, bodyHTML, onMount, headRight }) {
   const scrim = root.querySelector('[data-scrim]');
   scrim.addEventListener('click', (e) => { if (e.target === scrim) closeSheet(); });
 
-  closeCurrent = () => { root.innerHTML = ''; closeCurrent = null; };
+  const onKey = (e) => { if (e.key === 'Escape') closeSheet(); };
+  document.addEventListener('keydown', onKey);
+
+  closeCurrent = () => {
+    document.removeEventListener('keydown', onKey);
+    root.innerHTML = '';
+    closeCurrent = null;
+  };
+
   if (onMount) onMount(root.querySelector('.sheet'));
   return closeSheet;
 }
@@ -67,7 +142,7 @@ export function isSheetOpen() {
   return !!closeCurrent;
 }
 
-/* Yes/no confirmation as a sheet. Resolves true/false. */
+/* Yes/no confirmation. Resolves true/false. */
 export function confirmSheet({ title, message, confirmLabel = 'Confirm', danger = false }) {
   return new Promise((resolve) => {
     let answered = false;
@@ -115,7 +190,7 @@ export function pickSheet({ title, options }) {
   });
 }
 
-/* ---------------- misc ---------------- */
+/* ---------------- formatting ---------------- */
 
 export function fmtNum(n, digits = 1) {
   const v = Number(n) || 0;

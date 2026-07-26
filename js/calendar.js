@@ -10,6 +10,8 @@ const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 // Which month is on screen; survives navigation within the session.
 let cursor = new Date();
+// Direction of the last month change, so the grid slides the way you swiped.
+let slide = 0;
 
 export function renderCalendar(view) {
   const year = cursor.getFullYear();
@@ -68,7 +70,7 @@ export function renderCalendar(view) {
       <div class="screen-title">${esc(monthName)}<small>${lifts} session${lifts === 1 ? '' : 's'} this month</small></div>
       <button class="icon-btn" data-prev aria-label="Previous month">${icon('back')}</button>
       <button class="icon-btn" data-next aria-label="Next month">${icon('chev')}</button>
-      <button class="icon-btn" data-settings aria-label="Settings">${icon('gear')}</button>
+      <button class="icon-btn hide-desktop" data-settings aria-label="Settings">${icon('gear')}</button>
     </header>
 
     <div class="cal-summary">
@@ -79,7 +81,7 @@ export function renderCalendar(view) {
 
     <div class="cal-wrap">
       <div class="cal-dow">${DOW.map((d) => `<span>${d}</span>`).join('')}</div>
-      <div class="cal-grid">${weeks.flat().join('')}</div>
+      <div class="cal-grid${slide > 0 ? ' slide-left' : slide < 0 ? ' slide-right' : ''}">${weeks.flat().join('')}</div>
     </div>
 
     ${lifts + counts.abs + counts.cardio === 0 ? `
@@ -108,8 +110,10 @@ function isCurrentMonth() {
 }
 
 function shift(delta, view) {
+  slide = delta;
   cursor = new Date(cursor.getFullYear(), cursor.getMonth() + delta, 1);
   renderCalendar(view);
+  slide = 0;
 }
 
 /* A day can hold several workouts — a lifting session plus abs or cardio. */

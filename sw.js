@@ -1,6 +1,6 @@
 /* PPL Workout Tracker — offline shell cache.
    Bump CACHE when any shell file changes. */
-const CACHE = 'ppl-shell-v3';
+const CACHE = 'ppl-shell-v4';
 
 const SHELL = [
   './',

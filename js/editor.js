@@ -215,7 +215,7 @@ export function renderEditor(view, sessionId, params) {
       });
       if (!ok) return;
       deleteSession(s.id);
-      toast('Session deleted');
+      toast('Session deleted', 'ok');
       go('#/', true);
     });
   }
@@ -240,7 +240,7 @@ export function renderEditor(view, sessionId, params) {
       .map((ex) => ({ ...ex, sets: ex.sets.filter((x) => num(x.reps) > 0 || num(x.weight) > 0) }))
       .filter((ex) => ex.sets.length > 0);
 
-    if (!saved.exercises.length) { toast('Log at least one set first'); return; }
+    if (!saved.exercises.length) { toast('Add at least one set before saving', 'error'); return; }
 
     // Exercise list drifted from the workout? Offer to make it permanent.
     const tpl = saved.templateId ? getTemplate(saved.templateId) : null;
@@ -259,8 +259,10 @@ export function renderEditor(view, sessionId, params) {
     saved.exercises.forEach((ex) => rememberExercise(ex.name, saved.type));
     upsertSession(saved);
     if (isNew) state.draft = null;
-    saveNow();
-    toast(isNew ? 'Workout saved' : 'Changes saved');
+    const stored = saveNow();
+    const sets = saved.exercises.reduce((t, ex) => t + ex.sets.length, 0);
+    if (stored === false) toast('Saved for now, but storage is blocked here', 'error');
+    else toast(isNew ? `${saved.templateName || TYPE_LABEL[saved.type]} logged · ${sets} sets` : 'Changes saved', 'ok');
     go(`#/session/${saved.id}`, true);
   }
 }
@@ -284,7 +286,7 @@ export function pickExerciseSheet({ type, title }) {
       title: title || 'Add exercise',
       bodyHTML: `
         <div class="pad" style="padding-bottom:10px">
-          <input id="ac-search" class="card" style="width:100%;padding:13px;font-size:16px"
+          <input id="ac-search" class="field" type="search"
                  placeholder="Search or type a new name" autocomplete="off" autocapitalize="words">
         </div>
         <div class="autocomplete" id="ac-list"></div>`,

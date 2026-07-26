@@ -7,7 +7,7 @@ import {
   sortedTemplates, getTemplate, upsertTemplate, deleteTemplate, rememberExercise
 } from './store.js';
 import { STARTER_TEMPLATES } from './exercises.js';
-import { esc, icon, toast, confirmSheet } from './ui.js';
+import { esc, icon, toast, confirmSheet, paintBrandMarks } from './ui.js';
 import { go, back } from './app.js';
 import { pickExerciseSheet } from './editor.js';
 
@@ -18,10 +18,7 @@ export function renderSetup(view) {
 
   view.innerHTML = `
     <div class="hero">
-      <div class="hero-blocks">
-        <span class="c-push"></span><span class="c-pull"></span><span class="c-legs"></span>
-        <span class="c-abs"></span><span class="c-cardio"></span>
-      </div>
+      <span class="brand-mark" data-brand-mark></span>
       <h1>Set up your workouts</h1>
       <p>Each workout keeps its own list of exercises. Pick the ones you run — you'll fill in sets and reps when you actually log a session.</p>
     </div>
@@ -47,6 +44,8 @@ export function renderSetup(view) {
       Everything is stored on this device only.
     </div>
   `;
+
+  paintBrandMarks(view);
 
   view.querySelectorAll('[data-i]').forEach((row) => {
     const t = STARTER_TEMPLATES[+row.dataset.i];
@@ -140,7 +139,7 @@ export function renderTemplateEditor(view, id, params) {
       </header>
 
       <div class="pad" style="padding-top:8px">
-        <input class="card" id="tpl-name" style="width:100%;font-size:17px;font-weight:650;padding:14px"
+        <input class="field" id="tpl-name" style="font-size:17px;font-weight:650"
                placeholder="Workout name (e.g. Push)" value="${esc(draft.name)}"
                autocapitalize="words" autocomplete="off">
       </div>
@@ -203,10 +202,10 @@ export function renderTemplateEditor(view, id, params) {
 
     view.querySelector('[data-save]').addEventListener('click', () => {
       if (!draft.name.trim()) draft.name = defaultName(draft.type);
-      if (!draft.exercises.length) { toast('Add at least one exercise'); return; }
+      if (!draft.exercises.length) { toast('Add at least one exercise first', 'error'); return; }
       draft.exercises.forEach((ex) => rememberExercise(ex.name, draft.type));
       upsertTemplate(draft);
-      toast(isNew ? 'Workout created' : 'Workout updated');
+      toast(isNew ? `${draft.name} created` : `${draft.name} updated`, 'ok');
       go('#/workouts', true);
     });
 
@@ -219,7 +218,7 @@ export function renderTemplateEditor(view, id, params) {
       });
       if (!ok) return;
       deleteTemplate(draft.id);
-      toast('Workout deleted');
+      toast(`${draft.name} deleted`, 'ok');
       go('#/workouts', true);
     });
   }

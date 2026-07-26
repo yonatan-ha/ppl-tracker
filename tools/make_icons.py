@@ -11,12 +11,11 @@ import zlib
 
 OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "icons")
 
-BG = (21, 21, 21, 255)
-BARS = [
-    (232, 93, 84, 255),    # push  - red
-    (91, 143, 232, 255),   # pull  - blue
-    (233, 205, 116, 255),  # legs  - light yellow
-]
+# Brand mark: violet gradient tile with three bars, matching brandMarkSVG() in js/ui.js.
+GRAD_TOP = (124, 92, 246, 255)     # --accent
+GRAD_BOTTOM = (167, 96, 235, 255)  # --accent-2
+BAR = (252, 250, 255, 255)
+BAR_ALPHA = [242, 199, 242]        # long, short, long
 
 
 def rounded_rect_mask(size, radius):
@@ -50,26 +49,30 @@ def make_icon(size, path, maskable_pad=0.0):
     # transparent canvas
     px = [[(0, 0, 0, 0)] * size for _ in range(size)]
 
+    # rounded tile filled with the brand's diagonal gradient
     for y in range(size):
         for x in range(size):
             cov = mask[y * size + x]
-            if cov:
-                px[y][x] = (BG[0], BG[1], BG[2], cov)
+            if not cov:
+                continue
+            t = (x + y) / (2.0 * (size - 1))
+            g = tuple(int(round(GRAD_TOP[c] + (GRAD_BOTTOM[c] - GRAD_TOP[c]) * t)) for c in range(3))
+            px[y][x] = (g[0], g[1], g[2], cov)
 
     # three bars, centred, with a shrink factor for maskable safe-area
-    inset = 0.20 + maskable_pad
+    inset = 0.22 + maskable_pad
     bar_x0 = int(size * inset)
     bar_x1 = int(size * (1 - inset))
-    bar_h = int(size * 0.088)
-    gap = int(size * 0.056)
-    total = len(BARS) * bar_h + (len(BARS) - 1) * gap
+    bar_h = int(size * 0.098)
+    gap = int(size * 0.052)
+    total = 3 * bar_h + 2 * gap
     y0 = (size - total) // 2
     br = bar_h / 2.0
 
-    for i, color in enumerate(BARS):
+    for i, alpha in enumerate(BAR_ALPHA):
         top = y0 + i * (bar_h + gap)
-        # slightly stagger the bar widths so it reads as a logo, not a menu icon
-        x1 = bar_x1 - int(size * (0.0 if i == 1 else 0.055))
+        # the middle bar is shorter, so it reads as a mark rather than a menu icon
+        x1 = bar_x1 - int(size * (0.0 if i != 1 else 0.13))
         for y in range(top, top + bar_h):
             for x in range(bar_x0, x1):
                 # rounded bar ends
@@ -86,7 +89,7 @@ def make_icon(size, path, maskable_pad=0.0):
                 base = px[y][x]
                 if base[3] == 0:
                     continue
-                px[y][x] = blend(base, color, 255)
+                px[y][x] = blend(base, BAR, alpha)
 
     write_png(path, size, px)
 

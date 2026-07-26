@@ -2,7 +2,7 @@
 
 import { state, save, saveNow, exportJSON, importJSON, resetAll, hasSaveError } from './store.js';
 import { isDurable, canPersist, storageBackend, IS_FRAMED } from './storage.js';
-import { esc, icon, toast, confirmSheet } from './ui.js';
+import { esc, icon, toast, confirmSheet, withBusy } from './ui.js';
 import { go, back } from './app.js';
 
 function storageStatus() {
@@ -108,9 +108,11 @@ export function renderSettings(view) {
     saveNow();
   });
 
-  view.querySelector('[data-export]').addEventListener('click', () => {
-    exportJSON();
-    toast('Backup downloaded');
+  view.querySelector('[data-export]').addEventListener('click', async (e) => {
+    await withBusy(e.currentTarget, 'Exporting…', async () => {
+      exportJSON();
+      toast(`Backup of ${state.sessions.length} sessions downloaded`, 'ok');
+    });
     renderSettings(view);
   });
 
@@ -125,15 +127,17 @@ export function renderSettings(view) {
       confirmLabel: 'Import', danger: true
     });
     if (!ok) { file.value = ''; return; }
-    try {
-      importJSON(await f.text());
-      toast('Backup restored');
-      go('#/', true);
-      location.reload();
-    } catch (err) {
-      toast('That file could not be read');
-      console.error(err);
-    }
+    await withBusy(view.querySelector('[data-import]'), 'Restoring…', async () => {
+      try {
+        importJSON(await f.text());
+        toast('Backup restored', 'ok');
+        go('#/', true);
+        location.reload();
+      } catch (err) {
+        toast(`Couldn’t read ${f.name} — is it a PPL backup?`, 'error');
+        console.error(err);
+      }
+    });
     file.value = '';
   });
 

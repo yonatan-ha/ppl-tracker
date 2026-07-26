@@ -13,6 +13,8 @@ const VOLUME_FILTERS = ['all', 'push', 'pull', 'legs', 'abs'];
 let selectedExercise = null;
 let volumeFilter = 'all';
 
+/* Charting a long history costs real work, so show the frame and skeletons
+   first and fill them in on the next frame — the tab never feels stuck. */
 export function renderStats(view) {
   const sessions = sortedSessions();
 
@@ -23,6 +25,27 @@ export function renderStats(view) {
     return;
   }
 
+  if (sessions.length > 40) {
+    view.innerHTML = statsSkeleton(sessions.length);
+    requestAnimationFrame(() => requestAnimationFrame(() => paintStats(view, sessions)));
+  } else {
+    paintStats(view, sessions);
+  }
+}
+
+function statsSkeleton(count) {
+  const card = `
+    <div class="stat-card">
+      <div class="skeleton sk-line short"></div>
+      <div class="skeleton sk-chart"></div>
+      <div class="skeleton sk-line"></div>
+    </div>`;
+  return `
+    <header class="screen-head"><div class="screen-title">Stats<small>${count} sessions logged</small></div></header>
+    <div class="pad stack" style="gap:14px" aria-busy="true">${card + card + card}</div>`;
+}
+
+function paintStats(view, sessions) {
   const history = exerciseHistory(sessions);
   const names = [...history.keys()];
   if (!selectedExercise || !history.has(selectedExercise)) {
@@ -34,7 +57,7 @@ export function renderStats(view) {
 
   view.innerHTML = `
     <header class="screen-head"><div class="screen-title">Stats<small>${sessions.length} sessions logged</small></div></header>
-    <div class="pad stack" style="gap:14px">
+    <div class="pad stack stats-grid" style="gap:14px">
       ${exercisePanel(history)}
       ${volumePanel(sessions, weeks)}
       ${frequencyPanel(sessions, weeks)}
@@ -47,11 +70,11 @@ export function renderStats(view) {
       .sort((a, b) => history.get(b).length - history.get(a).length)
       .map((n) => ({ label: n, sub: `${history.get(n).length} sessions`, value: n }));
     const picked = await pickSheet({ title: 'Choose exercise', options: opts });
-    if (picked) { selectedExercise = picked; renderStats(view); }
+    if (picked) { selectedExercise = picked; paintStats(view, sessions); }
   });
 
   view.querySelectorAll('[data-vol]').forEach((b) => b.addEventListener('click', () => {
-    volumeFilter = b.dataset.vol; renderStats(view);
+    volumeFilter = b.dataset.vol; paintStats(view, sessions);
   }));
 
   wireChartTaps(view);

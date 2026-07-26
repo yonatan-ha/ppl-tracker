@@ -5,7 +5,9 @@ import {
   discardCorruptData, exportRawBackup, exportJSON, importJSON, hasSaveError
 } from './store.js';
 import { isDurable, canPersist, IS_FRAMED } from './storage.js';
-import { closeSheet, isSheetOpen, icon, esc, toast, confirmSheet } from './ui.js';
+import {
+  closeSheet, isSheetOpen, icon, esc, toast, confirmSheet, withBusy, paintBrandMarks
+} from './ui.js';
 import { renderCalendar } from './calendar.js';
 import { renderStats } from './stats.js';
 import { renderSessionDetail } from './session.js';
@@ -58,6 +60,11 @@ function render() {
   view.scrollTop = 0;
   window.scrollTo(0, 0);
 
+  // Replay the enter animation so a route change reads as movement.
+  view.classList.remove('view-enter');
+  void view.offsetWidth;
+  view.classList.add('view-enter');
+
   switch (root) {
     case '':        renderCalendar(view, params); break;
     case 'stats':   renderStats(view, params); break;
@@ -72,6 +79,8 @@ function render() {
     default:        go('#/', true); return;
   }
 
+  // On phones a full-screen flow hides the bar; the desktop sidebar stays put
+  // (CSS keeps it visible) so you never lose your bearings on a wide screen.
   const full = FULLSCREEN.has(root) || (root === 'log');
   tabbar.classList.toggle('hidden', full);
   view.classList.toggle('no-tabs', full);
@@ -79,6 +88,8 @@ function render() {
   tabbar.querySelectorAll('[data-nav]').forEach((b) => {
     const target = b.dataset.nav === '#/' ? '' : b.dataset.nav.slice(2);
     b.classList.toggle('active', target === root);
+    if (target === root) b.setAttribute('aria-current', 'page');
+    else b.removeAttribute('aria-current');
   });
 
   renderStorageWarning(root);
@@ -145,14 +156,15 @@ function renderStorageWarning(root) {
 
   view.prepend(bar);
 
-  bar.querySelector('[data-warn-export]').addEventListener('click', () => {
-    exportJSON();
-    toast('Backup downloaded');
-  });
+  bar.querySelector('[data-warn-export]').addEventListener('click', (e) =>
+    withBusy(e.currentTarget, 'Exporting…', async () => {
+      await exportJSON();
+      toast('Backup downloaded', 'ok');
+    }));
 
   const file = bar.querySelector('[data-warn-file]');
   bar.querySelector('[data-warn-import]').addEventListener('click', () => file.click());
-  file.addEventListener('change', () => restoreFromFile(file));
+  file.addEventListener('change', () => restoreFromFile(file, bar.querySelector('[data-warn-import]')));
 
   bar.querySelector('[data-warn-close]').addEventListener('click', () => {
     warnDismissed = true;
@@ -161,19 +173,22 @@ function renderStorageWarning(root) {
   });
 }
 
-async function restoreFromFile(input) {
+async function restoreFromFile(input, button) {
   const f = input.files && input.files[0];
   if (!f) return;
-  try {
-    importJSON(await f.text());
-    toast('Backup restored');
-    location.hash = '#/';
-    render();
-  } catch (err) {
-    console.error(err);
-    toast('That file could not be read');
-  }
-  input.value = '';
+  const run = async () => {
+    try {
+      importJSON(await f.text());
+      toast('Backup restored', 'ok');
+      location.hash = '#/';
+      render();
+    } catch (err) {
+      console.error(err);
+      toast(`Couldn’t read ${f.name} — is it a PPL backup?`, 'error');
+    }
+    input.value = '';
+  };
+  return button ? withBusy(button, 'Restoring…', run) : run();
 }
 
 /* ---------------- unreadable save file ---------------- */
@@ -194,14 +209,15 @@ function renderRecovery(target) {
       Details: ${esc(loadFailure && loadFailure.error || 'unknown error')}
     </div>`;
 
-  target.querySelector('[data-rec-raw]').addEventListener('click', () => {
-    exportRawBackup();
-    toast('Downloaded');
-  });
+  target.querySelector('[data-rec-raw]').addEventListener('click', (e) =>
+    withBusy(e.currentTarget, 'Preparing…', async () => {
+      await exportRawBackup();
+      toast('Downloaded', 'ok');
+    }));
 
   const file = target.querySelector('[data-rec-file]');
   target.querySelector('[data-rec-import]').addEventListener('click', () => file.click());
-  file.addEventListener('change', () => restoreFromFile(file));
+  file.addEventListener('change', () => restoreFromFile(file, target.querySelector('[data-rec-import]')));
 
   target.querySelector('[data-rec-reset]').addEventListener('click', async () => {
     const ok = await confirmSheet({
@@ -219,6 +235,7 @@ function renderRecovery(target) {
 /* ---------------- boot ---------------- */
 
 loadState();
+paintBrandMarks();
 
 try { warnDismissed = sessionStorage.getItem(WARN_DISMISSED) === '1'; } catch (e) { /* fine */ }
 
@@ -238,6 +255,25 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) saveN
 window.addEventListener('pagehide', saveNow);
 
 render();
+dismissBootSplash();
+
+/* The splash covers the first paint so the app never flashes an empty frame.
+   It clears as soon as the first screen is on the glass — no artificial wait.
+   rAF doesn't run in a backgrounded or non-compositing tab, so a timer backs it
+   up; whichever lands first wins, and CSS clears it even if neither does. */
+function dismissBootSplash() {
+  const boot = document.getElementById('boot');
+  if (!boot) return;
+  let cleared = false;
+  const clear = () => {
+    if (cleared) return;
+    cleared = true;
+    boot.classList.add('done');
+    setTimeout(() => boot.remove(), 400);
+  };
+  requestAnimationFrame(() => requestAnimationFrame(clear));
+  setTimeout(clear, 500);
+}
 
 /* Offline shell, for the hosted copy only. On localhost a cached worker just
    serves stale code while you're editing, so skip it there. */
@@ -246,10 +282,25 @@ const IS_LOCAL = ['localhost', '127.0.0.1', ''].includes(location.hostname);
 if ('serviceWorker' in navigator && location.protocol !== 'file:' && !IS_LOCAL) {
   window.addEventListener('load', () => {
     // Absent on the single-file build — failing to register is fine there.
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    navigator.serviceWorker.register('sw.js').then(watchForUpdate).catch(() => {});
   });
 } else if ('serviceWorker' in navigator && IS_LOCAL) {
   navigator.serviceWorker.getRegistrations()
     .then((rs) => rs.forEach((r) => r.unregister()))
     .catch(() => {});
+}
+
+/* A new version finished downloading in the background — say so rather than
+   waiting for the user to wonder why a fix hasn't appeared. */
+function watchForUpdate(reg) {
+  if (!reg) return;
+  reg.addEventListener('updatefound', () => {
+    const sw = reg.installing;
+    if (!sw) return;
+    sw.addEventListener('statechange', () => {
+      if (sw.state === 'installed' && navigator.serviceWorker.controller) {
+        toast('Update ready — reopen the app to apply', 'ok');
+      }
+    });
+  });
 }

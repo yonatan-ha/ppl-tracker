@@ -2,7 +2,7 @@
 
 import {
   state, sortedSessions, sessionVolume, sessionMinutes, topSet, est1RM,
-  num, weekStart, isoDate, parseISO, MAIN_TYPES, TYPE_LABEL
+  num, weekStart, isoDate, parseISO, MAIN_TYPES, TYPE_LABEL, machineFactor
 } from './store.js';
 import { esc, icon, compact, fmtNum, pickSheet } from './ui.js';
 import { lineChart, barChart, progressRing, wireChartTaps } from './charts.js';
@@ -136,7 +136,9 @@ function exercisePanel(history) {
       return { y: mins, label: when, cap: `${when} · ${fmtNum(mins, 0)} min${km ? ` · ${fmtNum(km)} km` : ''}`, color };
     }
     const t = topSet(e.ex);
-    const w = num(t && t.weight), r = num(t && t.reps);
+    // Converted onto the reference stack, so a set logged on a mislabelled
+    // cable sits on the same line as the rest instead of spiking the chart.
+    const w = num(t && t.weight) * machineFactor(e.ex.machineId), r = num(t && t.reps);
     return {
       y: w, label: when,
       cap: `${when} · top set ${r}×${fmtNum(w)}kg · e1RM ${fmtNum(est1RM(w, r), 0)}kg`,
@@ -147,7 +149,7 @@ function exercisePanel(history) {
   const best = points.reduce((m, p) => Math.max(m, p.y), 0);
   const bestE1RM = isCardio ? 0 : entries.reduce((m, e) => {
     const t = topSet(e.ex);
-    return Math.max(m, est1RM(t && t.weight, t && t.reps));
+    return Math.max(m, est1RM(num(t && t.weight) * machineFactor(e.ex.machineId), t && t.reps));
   }, 0);
 
   const delta = points.length > 1 ? points[points.length - 1].y - points[0].y : 0;

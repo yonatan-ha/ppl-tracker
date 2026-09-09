@@ -1,6 +1,9 @@
 /* Settings: workouts, weekly target, backup, reset. */
 
-import { state, save, saveNow, exportJSON, importJSON, resetAll, hasSaveError } from './store.js';
+import {
+  state, save, saveNow, exportJSON, importJSON, resetAll, hasSaveError,
+  sortedMachines, isCalibrated
+} from './store.js';
 import { isDurable, canPersist, storageBackend, IS_FRAMED } from './storage.js';
 import { esc, icon, toast, toastSaveResult, confirmSheet, withBusy } from './ui.js';
 import { go, back } from './app.js';
@@ -18,6 +21,7 @@ function storageStatus() {
 export function renderSettings(view) {
   const st = state.settings;
   const since = st.sessionsSinceExport || 0;
+  const uncal = sortedMachines().filter((m) => !isCalibrated(m)).length;
   const lastExport = st.lastExportAt
     ? new Date(st.lastExportAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
     : 'never';
@@ -33,6 +37,13 @@ export function renderSettings(view) {
       <span class="lr-main">
         <span class="lr-title">My workouts</span>
         <span class="lr-sub">${state.templates.length} template${state.templates.length === 1 ? '' : 's'}</span>
+      </span>
+      <span class="chev">${icon('chev')}</span>
+    </button>
+    <button class="list-row" data-cables>
+      <span class="lr-main">
+        <span class="lr-title">Cables</span>
+        <span class="lr-sub">${uncal ? `${uncal} station${uncal === 1 ? '' : 's'} to calibrate` : 'All stations calibrated'}</span>
       </span>
       <span class="chev">${icon('chev')}</span>
     </button>
@@ -94,6 +105,7 @@ export function renderSettings(view) {
 
   view.querySelector('[data-back]').addEventListener('click', () => back());
   view.querySelector('[data-workouts]').addEventListener('click', () => go('#/workouts'));
+  view.querySelector('[data-cables]').addEventListener('click', () => go('#/cables'));
 
   const target = view.querySelector('#wk-target');
   view.querySelectorAll('[data-target]').forEach((b) => b.addEventListener('click', () => {

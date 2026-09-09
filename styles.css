@@ -619,6 +619,46 @@ button.list-row:active { background: var(--card); }
 
 .sl-count { float: right; color: var(--dim); letter-spacing: var(--tracking-wide); }
 
+/* Which cable stack a set was logged on. Only ever shown for the handful of
+   exercises that run on one, so the rest of the card stays quiet. */
+.ex-gear { padding: 0 12px 2px; }
+.gear-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 30px; padding: 5px 11px; border-radius: var(--r-pill);
+  font-family: var(--font-display); font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: var(--tracking-wide);
+  background: var(--card-2); color: var(--dimmer);
+  border: 1px dashed var(--border);
+  transition: all var(--t-fast) var(--ease-standard);
+}
+.gear-chip.on { border-style: solid; border-color: var(--accent); color: var(--accent-2); background: var(--accent-soft); }
+.gear-chip.uncal { border-color: rgba(255,209,102,.55); color: var(--amber-400); background: rgba(255,209,102,.1); }
+button.gear-chip:active { transform: scale(.95); }
+
+.det-gear {
+  margin-left: 8px; padding: 2px 8px; border-radius: var(--r-pill);
+  font-family: var(--font-display); font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: var(--tracking-wide);
+  background: var(--card-2); color: var(--dimmer); border: 1px solid var(--border-soft);
+  white-space: nowrap;
+}
+
+/* Calibration: two readings of the same effort, side by side. */
+.cal-pair { display: flex; align-items: center; gap: 10px; }
+.cal-pair label {
+  flex: 1; min-width: 0;
+  font-family: var(--font-display); font-size: 12px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: var(--tracking-wide); color: var(--dim);
+}
+.cal-pair .field { width: 110px; flex: none; text-align: center; font-family: var(--font-mono); }
+.cal-out {
+  padding: 12px 14px; border-radius: var(--r-md); line-height: 1.55;
+  background: var(--card-2); border: 1px solid var(--border-soft);
+  font-size: 13px; color: var(--dim);
+}
+.cal-out b { color: var(--accent-2); }
+
+
 .tpl-row {
   display: flex; align-items: center; gap: 4px;
   padding: 6px 8px 6px 12px; min-height: 52px;

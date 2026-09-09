@@ -1,13 +1,13 @@
 /* State + persistence + selectors. Everything lives in one localStorage blob. */
 
-import { SEED_EXERCISES } from './exercises.js';
+import { SEED_EXERCISES, EXERCISE_GEAR } from './exercises.js';
 import {
   initStorage, readRaw, writeRaw, requestPersistence,
   hadPreviousVisit, stampVisit, isDurable, canPersist, IS_FRAMED
 } from './storage.js';
 
 const STORAGE_KEY = 'ppl.v1';
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 /* Every type is a workout in its own right. MAIN_TYPES are the lifting days
    that count toward the weekly target; abs and cardio stand on their own. */
@@ -39,6 +39,8 @@ function blankState() {
     sessions: [],
     templates: [],
     exerciseLibrary: SEED_EXERCISES.map((e) => ({ name: e.name, type: e.type })),
+    machines: SEED_MACHINES.map((m) => ({ id: uid(), ...m })),
+    stackExercises: [...SEED_STACK_EXERCISES],
     draft: null
   };
 }
@@ -114,6 +116,17 @@ function migrate(data) {
   // a ghost, so drop the stale draft rather than resume it full of numbers
   // nobody entered. Only ever costs one unsaved, in-progress session.
   if ((data.version || 1) < 3) out.draft = null;
+
+  // v3 -> v4: the cable stacks become real, each with a factor converting its
+  // readings to the reference stack's scale. Sessions logged before this stay
+  // untagged rather than being asserted onto a stack nobody recorded — they
+  // count 1:1, and you can set the right one by editing the session.
+  if ((data.version || 1) < 4) {
+    if (!Array.isArray(out.machines) || !out.machines.length) {
+      out.machines = SEED_MACHINES.map((m) => ({ id: uid(), ...m }));
+    }
+    if (!Array.isArray(out.stackExercises)) out.stackExercises = [...SEED_STACK_EXERCISES];
+  }
 
   out.version = SCHEMA_VERSION;
   return out;
@@ -288,9 +301,12 @@ export function deleteSession(id) {
   saveNow();
 }
 
-/* Volume for one exercise entry: sum of reps x weight over its sets. */
+/* Volume for one exercise entry: sum of reps x weight over its sets, with the
+   weights converted onto the reference scale so a set on a mislabelled stack
+   doesn't inflate the total. */
 export function exerciseVolume(ex) {
-  return (ex.sets || []).reduce((t, s) => t + (num(s.reps) * num(s.weight)), 0);
+  const f = machineFactor(ex && ex.machineId);
+  return (ex.sets || []).reduce((t, s) => t + (num(s.reps) * num(s.weight) * f), 0);
 }
 
 /* Cardio has no meaningful load, so it never contributes volume. */
@@ -431,7 +447,15 @@ export function prefillExercise(te, date, type) {
   const rows = last && last.sets.length ? last.sets.length : defaultSetCount(type);
   const sets = [];
   for (let i = 0; i < rows; i++) sets.push({ id: uid(), reps: '', weight: '' });
-  return { id: uid(), name: te.name, sets };
+
+  const ex = { id: uid(), name: te.name, sets };
+  // On a stack exercise, open on the one you used last time — the chip shows
+  // which, so switching stations is a tap rather than a thing to remember.
+  if (usesStack(te.name)) {
+    const ref = referenceMachine();
+    ex.machineId = lastMachineFor(te.name, date) || (ref ? ref.id : null);
+  }
+  return ex;
 }
 
 /* Does this session's exercise list still match its template? */
@@ -440,6 +464,127 @@ export function matchesTemplate(session, tpl) {
   const a = (session.exercises || []).map((e) => e.name.trim().toLowerCase()).join('|');
   const b = (tpl.exercises || []).map((e) => e.name.trim().toLowerCase()).join('|');
   return a === b;
+}
+
+/* ---------------- cable stacks ---------------- */
+
+/* The gym has three cable stations and their labels don't agree — the same
+   effort reads one number on one and something else on another. Each stack
+   carries a factor converting its readings to the reference stack's scale.
+
+   factor null means "not calibrated yet": readings are still logged exactly as
+   shown, they just aren't converted, and the UI says so instead of quietly
+   implying the chart is comparable. */
+export const SEED_MACHINES = [
+  { name: 'Cable Main', factor: 1, reference: true },
+  { name: 'Cable Co-Main', factor: null, reference: false },
+  { name: 'Cable 2', factor: null, reference: false },
+  { name: 'Cable 3', factor: null, reference: false }
+];
+
+/* Exercises performed on one of those stacks, held as lowercased names. */
+export const SEED_STACK_EXERCISES = [
+  'triceps pushdown',
+  'overhead triceps extension',
+  'single-arm lat pulldown'
+];
+
+/* Reference first, then the order they were added. */
+export function sortedMachines() {
+  return [...(state.machines || [])].sort(
+    (a, b) => (a.reference ? 0 : 1) - (b.reference ? 0 : 1));
+}
+
+export function getMachine(id) {
+  return (state.machines || []).find((m) => m.id === id) || null;
+}
+
+export function referenceMachine() {
+  const list = state.machines || [];
+  return list.find((m) => m.reference) || list[0] || null;
+}
+
+export function upsertMachine(m) {
+  const i = (state.machines || []).findIndex((x) => x.id === m.id);
+  if (i >= 0) state.machines[i] = m;
+  else state.machines.push(m);
+  saveNow();
+}
+
+export function deleteMachine(id) {
+  const m = getMachine(id);
+  if (!m || m.reference) return;          // the scale itself can't be removed
+  state.machines = state.machines.filter((x) => x.id !== id);
+  saveNow();
+}
+
+/* A calibrated stack knows what its numbers are worth; the reference defines
+   the scale, so it is calibrated by definition. */
+export function isCalibrated(m) {
+  return !!m && (m.reference || (typeof m.factor === 'number' && m.factor > 0));
+}
+
+/* What one reading on this stack is worth on the reference scale. An unknown
+   or uncalibrated stack counts 1:1 — wrong, but honestly wrong, and it costs
+   nothing later because raw readings are what gets stored. */
+export function machineFactor(id) {
+  const m = getMachine(id);
+  return isCalibrated(m) ? (m.reference ? 1 : m.factor) : 1;
+}
+
+/* Is this exercise done on one of the calibrated stacks? */
+export function usesStack(name) {
+  return (state.stackExercises || []).includes(String(name || '').trim().toLowerCase());
+}
+
+export function setUsesStack(name, on) {
+  const key = String(name || '').trim().toLowerCase();
+  if (!key) return;
+  const list = state.stackExercises || (state.stackExercises = []);
+  const i = list.indexOf(key);
+  if (on && i < 0) list.push(key);
+  if (!on && i >= 0) list.splice(i, 1);
+  saveNow();
+}
+
+/* Which stack an exercise was on last time, so logging it again defaults to
+   the one you actually used rather than making you pick every session. */
+export function lastMachineFor(name, beforeDate, excludeId) {
+  const key = String(name || '').trim().toLowerCase();
+  let found = null;
+  for (const s of state.sessions) {
+    if (excludeId && s.id === excludeId) continue;
+    if (beforeDate && s.date > beforeDate) continue;
+    for (const ex of s.exercises || []) {
+      if (!ex.machineId || ex.name.trim().toLowerCase() !== key) continue;
+      if (!found || s.date > found.date) found = { date: s.date, machineId: ex.machineId };
+    }
+  }
+  return found ? found.machineId : null;
+}
+
+/* ---------------- weight, on one scale ---------------- */
+
+/* What a logged set is worth on the reference stack's scale.
+
+   Readings are stored exactly as the machine showed them and converted here,
+   at the point of comparison — so recalibrating a stack corrects every past
+   session at once. Storing converted numbers instead would make that
+   impossible to undo. */
+export function effectiveWeight(set, ex) {
+  return num(set && set.weight) * machineFactor(ex && ex.machineId);
+}
+
+/* ---------------- weight increments ---------------- */
+
+/* Dumbbells go up in 2 kg jumps, a barbell in 2.5, a stack a plate at a time. */
+const GEAR_STEP = { dumbbell: 2, barbell: 2.5, cable: 5, machine: 5 };
+
+export function stepFor(type, name) {
+  const u = unitsFor(type);
+  if (type === 'cardio') return u;
+  const stepB = GEAR_STEP[EXERCISE_GEAR[String(name || '').trim().toLowerCase()]];
+  return stepB ? { ...u, stepB } : u;
 }
 
 /* ---------------- saving a file ---------------- */

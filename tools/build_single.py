@@ -30,6 +30,7 @@ MODULES = [
     "templates.js",
     "stats.js",
     "settings.js",
+    "machines.js",
     "app.js",
 ]
 

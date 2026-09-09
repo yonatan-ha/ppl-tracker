@@ -5,10 +5,12 @@
    with it and it stops being editable. */
 
 import {
-  state, uid, save, saveNow, num, TYPES, TYPE_LABEL, unitsFor,
+  state, uid, save, saveNow, num, TYPES, TYPE_LABEL,
   todayISO, fmtDate, getSession, upsertSession, deleteSession,
   sortedTemplates, getTemplate, upsertTemplate, sessionFromTemplate, prefillExercise,
-  matchesTemplate, lastPerformance, allExerciseNames, rememberExercise
+  matchesTemplate, lastPerformance, allExerciseNames, rememberExercise,
+  usesStack, getMachine, sortedMachines, referenceMachine, isCalibrated,
+  machineFactor, lastMachineFor, stepFor
 } from './store.js';
 import { esc, icon, toast, openSheet, closeSheet, pickSheet, confirmSheet, fmtNum } from './ui.js';
 import { go, back } from './app.js';
@@ -87,8 +89,12 @@ export function renderEditor(view, sessionId, params) {
 
   function paint() {
     const title = s.templateName || TYPE_LABEL[s.type];
-    const u = unitsFor(s.type);
-    prev = s.exercises.map((ex) => lastPerformance(ex.name, s.date, s.id));
+    prev = s.exercises.map((ex) => {
+      const last = lastPerformance(ex.name, s.date, s.id);
+      // Remember which stack it was on, so the ghost can be converted to today's.
+      if (last) last.machineId = lastMachineFor(ex.name, s.date, s.id);
+      return last;
+    });
 
     view.innerHTML = `
       <header class="screen-head bordered">
@@ -110,7 +116,7 @@ export function renderEditor(view, sessionId, params) {
 
       <div class="section-label">Exercises<span class="sl-count" data-progress>${progressLabel()}</span></div>
       <div class="pad stack">
-        ${s.exercises.map((ex, i) => exerciseCard(ex, i, u)).join('')}
+        ${s.exercises.map((ex, i) => exerciseCard(ex, i, stepFor(s.type, ex.name))).join('')}
         <button class="btn ghost" data-add-ex>${icon('plus')} Add exercise</button>
       </div>
 
@@ -131,10 +137,24 @@ export function renderEditor(view, sessionId, params) {
     wire();
   }
 
-  /* Last time's numbers for one set row, or null. */
+  /* Last time's numbers for one set row, converted onto the stack you're using
+     today. Log 90 on a stack that reads high, switch to the reference next
+     week, and the ghost says 40 — the number that actually repeats the lift. */
   function ghostFor(i, j) {
     const p = prev[i];
-    return (p && p.sets[j]) || null;
+    const set = p && p.sets[j];
+    if (!set) return null;
+
+    const from = machineFactor(p.machineId);
+    const to = machineFactor(s.exercises[i].machineId);
+    if (from === to) return set;
+    return { reps: set.reps, weight: convert(set.weight, from, to) };
+  }
+
+  function convert(weight, from, to) {
+    if (weight === '' || weight == null) return '';
+    const v = (num(weight) * from) / (to || 1);
+    return String(Math.round(v * 100) / 100);
   }
 
   function entered(set) {
@@ -157,7 +177,8 @@ export function renderEditor(view, sessionId, params) {
 
     const p = prev[i];
     const hint = p
-      ? `<b>Last</b> ${esc(fmtDate(p.date, { day: 'numeric', month: 'short' }))}`
+      ? `<b>Last</b> ${esc(fmtDate(p.date, { day: 'numeric', month: 'short' }))}${
+          p.machineId ? ` · ${esc(machineName(p.machineId))}` : ''}`
       : 'First time logging this one';
 
     // Only worth offering while a blank row still has a ghost behind it.
@@ -171,12 +192,36 @@ export function renderEditor(view, sessionId, params) {
                   aria-label="Lock ${esc(ex.name)}"${started(ex) ? '' : ' disabled'}>${icon('unlock')}</button>
           <button class="icon-btn plain" data-rm-ex="${i}" aria-label="Remove exercise">${icon('close')}</button>
         </div>
+        ${machineChip(ex, i)}
         <div class="ex-last">${hint}</div>
         ${ex.sets.map((set, j) => setRow(set, i, j, u)).join('')}
         <div class="ex-foot">
           <button class="mini-btn" data-add-set="${i}">+ Set</button>
           ${repeatable ? `<button class="mini-btn" data-same="${i}">Same as last time</button>` : ''}
         </div>
+      </div>`;
+  }
+
+  function machineName(id) {
+    const m = getMachine(id);
+    return m ? m.name : 'Unknown cable';
+  }
+
+  /* Which stack you're on. Only shown for the exercises that run on one, so
+     dumbbell work never asks you anything. */
+  function machineChip(ex, i, locked) {
+    if (!usesStack(ex.name)) return '';
+    const m = ex.machineId ? getMachine(ex.machineId) : null;
+    const warn = m && !isCalibrated(m) ? ' uncal' : '';
+    const label = m ? esc(m.name) : 'Which cable?';
+
+    if (locked) return `<div class="ex-gear"><span class="gear-chip on${warn}">${label}</span></div>`;
+
+    return `
+      <div class="ex-gear">
+        <button class="gear-chip${m ? ' on' : ''}${warn}" data-machine="${i}">
+          ${label}${m && !isCalibrated(m) ? ' · not calibrated' : ''}
+        </button>
       </div>`;
   }
 
@@ -235,6 +280,7 @@ export function renderEditor(view, sessionId, params) {
           <button class="lock-btn on" data-lock="${i}" aria-pressed="true"
                   aria-label="Unlock ${esc(ex.name)}">${icon('lock')}</button>
         </div>
+        ${machineChip(ex, i, true)}
         <div class="ex-done">${done}</div>
       </div>`;
   }
@@ -292,6 +338,23 @@ export function renderEditor(view, sessionId, params) {
         if (set.reps === '') set.reps = g.reps == null ? '' : String(g.reps);
         if (set.weight === '') set.weight = g.weight == null ? '' : String(g.weight);
       });
+      touch(); paint();
+    }));
+
+    view.querySelectorAll('[data-machine]').forEach((b) => b.addEventListener('click', async () => {
+      const i = +b.dataset.machine;
+      const picked = await pickSheet({
+        title: `${s.exercises[i].name} — which cable?`,
+        options: sortedMachines().map((m) => ({
+          label: m.name,
+          sub: m.reference ? 'Reference · everything converts to this'
+             : isCalibrated(m) ? `Counts as ${fmtNum(m.factor * 100, 0)}% of ${referenceMachine().name}`
+             : 'Not calibrated yet — counts 1:1',
+          value: m.id
+        }))
+      });
+      if (!picked) return;
+      s.exercises[i].machineId = picked;
       touch(); paint();
     }));
 

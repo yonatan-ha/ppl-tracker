@@ -14,6 +14,7 @@ import { renderSessionDetail } from './session.js';
 import { renderEditor, startLogFlow } from './editor.js';
 import { renderTemplateList, renderTemplateEditor, renderSetup } from './templates.js';
 import { renderSettings } from './settings.js';
+import { renderMachines } from './machines.js';
 
 const view = document.getElementById('view');
 const tabbar = document.getElementById('tabbar');
@@ -37,7 +38,7 @@ function parseRoute() {
   return { parts, params };
 }
 
-const FULLSCREEN = new Set(['log', 'setup', 'workouts']);
+const FULLSCREEN = new Set(['log', 'setup', 'workouts', 'cables']);
 
 function render() {
   const { parts, params } = parseRoute();
@@ -69,6 +70,7 @@ function render() {
     case '':        renderCalendar(view, params); break;
     case 'stats':   renderStats(view, params); break;
     case 'settings': renderSettings(view, params); break;
+    case 'cables':  renderMachines(view, params); break;
     case 'setup':   renderSetup(view, params); break;
     case 'workouts':
       if (parts[1]) renderTemplateEditor(view, parts[1], params);

@@ -25,6 +25,7 @@ export const SEED_EXERCISES = [
   { name: 'Pull-Up', type: 'pull' },
   { name: 'Chin-Up', type: 'pull' },
   { name: 'Lat Pulldown', type: 'pull' },
+  { name: 'Single-Arm Lat Pulldown', type: 'pull' },
   { name: 'Barbell Row', type: 'pull' },
   { name: 'Dumbbell Row', type: 'pull' },
   { name: 'Seated Cable Row', type: 'pull' },
@@ -77,6 +78,41 @@ export const SEED_EXERCISES = [
   { name: 'Outdoor Run', type: 'cardio' },
   { name: 'Jump Rope', type: 'cardio' }
 ];
+
+
+/* What each exercise is loaded with. This drives one thing: how much the ± button
+   adds. Dumbbells come in 2 kg jumps, a barbell takes 1.25 a side, a stack moves
+   a plate at a time. Anything not listed falls back to 2.5. */
+const GEAR_GROUPS = {
+  dumbbell: [
+    'Dumbbell Bench Press', 'Incline Dumbbell Press', 'Seated Dumbbell Shoulder Press',
+    'Lateral Raise', 'Dumbbell Row', 'Rear Delt Fly', 'Dumbbell Curl', 'Hammer Curl',
+    'Shrugs', 'Bulgarian Split Squat', 'Walking Lunge', 'Goblet Squat'
+  ],
+  barbell: [
+    'Bench Press', 'Incline Bench Press', 'Overhead Press', 'Skull Crushers',
+    'Close-Grip Bench Press', 'Deadlift', 'Barbell Row', 'T-Bar Row', 'Barbell Curl',
+    'Preacher Curl', 'Back Squat', 'Front Squat', 'Romanian Deadlift', 'Hip Thrust'
+  ],
+  cable: [
+    'Cable Fly', 'Cable Lateral Raise', 'Triceps Pushdown', 'Overhead Triceps Extension',
+    'Seated Cable Row', 'Face Pull', 'Cable Curl', 'Single-Arm Lat Pulldown', 'Cable Crunch'
+  ],
+  machine: [
+    'Machine Chest Press', 'Pec Deck', 'Lat Pulldown', 'Chest-Supported Row',
+    'Hack Squat', 'Leg Press', 'Leg Extension', 'Leg Curl', 'Seated Leg Curl',
+    'Calf Raise', 'Seated Calf Raise', 'Machine Crunch'
+  ]
+};
+
+/* lowercased name -> gear. */
+export const EXERCISE_GEAR = (() => {
+  const out = {};
+  for (const gear of Object.keys(GEAR_GROUPS)) {
+    for (const name of GEAR_GROUPS[gear]) out[name.toLowerCase()] = gear;
+  }
+  return out;
+})();
 
 /* Offered during first-run setup — one workout per type, fully editable after.
    Templates list exercises only; sets and reps are entered when you log. */

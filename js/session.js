@@ -2,7 +2,7 @@
 
 import {
   getSession, sessionVolume, sessionSetCount, sessionMinutes, exerciseVolume,
-  fmtDate, num, unitsFor, TYPE_LABEL
+  fmtDate, num, unitsFor, TYPE_LABEL, getMachine, machineFactor
 } from './store.js';
 import { esc, icon, compact, fmtNum } from './ui.js';
 import { go, back } from './app.js';
@@ -64,6 +64,16 @@ export function renderSessionDetail(view, id) {
   view.querySelector('[data-edit2]').addEventListener('click', () => go(`#/log/${s.id}`));
 }
 
+/* Which stack it was on, and what its numbers count for — otherwise 90 on a
+   cable that reads high looks like a personal best. */
+function gearNote(ex) {
+  const m = ex.machineId ? getMachine(ex.machineId) : null;
+  if (!m) return '';
+  const f = machineFactor(ex.machineId);
+  const note = f === 1 ? '' : ` · ` + fmtNum(f * 100, 0) + `%`;
+  return `<span class="det-gear">` + esc(m.name) + note + `</span>`;
+}
+
 function totalDistance(s) {
   return (s.exercises || []).reduce(
     (t, ex) => t + (ex.sets || []).reduce((n, x) => n + num(x.weight), 0), 0);
@@ -76,7 +86,7 @@ function exBlock(ex, u, isCardio) {
 
   return `
     <div class="det-ex">
-      <div class="det-ex-name">${esc(ex.name)}</div>
+      <div class="det-ex-name">${esc(ex.name)}${gearNote(ex)}</div>
       <div class="det-sets">
         ${ex.sets.map((x) => isCardio
           ? `<span class="det-set"><b>${fmtNum(x.reps)}</b> ${unitA}${num(x.weight) ? ` · <b>${fmtNum(x.weight)}</b> ${unitB}` : ''}</span>`

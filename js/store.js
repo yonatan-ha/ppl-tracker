@@ -7,7 +7,7 @@ import {
 } from './storage.js';
 
 const STORAGE_KEY = 'ppl.v1';
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 /* Every type is a workout in its own right. MAIN_TYPES are the lifting days
    that count toward the weekly target; abs and cardio stand on their own. */
@@ -107,6 +107,13 @@ function migrate(data) {
 
     if (out.draft && out.draft.addon) delete out.draft.addon;
   }
+
+  // v2 -> v3: prefill used to write last session's numbers straight into the
+  // set fields, so in an old draft a value you typed and one the app guessed
+  // are indistinguishable. Fields open empty now with last time behind them as
+  // a ghost, so drop the stale draft rather than resume it full of numbers
+  // nobody entered. Only ever costs one unsaved, in-progress session.
+  if ((data.version || 1) < 3) out.draft = null;
 
   out.version = SCHEMA_VERSION;
   return out;
@@ -414,14 +421,16 @@ export function defaultSetCount(type) {
   return MAIN_TYPES.includes(type) ? 2 : 1;
 }
 
+/* Opens an exercise with the *shape* of last time — the same number of set
+   rows — but every field empty. Last time's numbers show as ghosts in the
+   editor instead, so a row you never touch stays blank and gets dropped on
+   save. Prefilling real values meant an untouched exercise recorded a workout
+   you never actually did. */
 export function prefillExercise(te, date, type) {
   const last = lastPerformance(te.name, date);
-  if (last && last.sets.length) {
-    // Done before: mirror exactly what you did last time.
-    return { id: uid(), name: te.name, sets: last.sets.map((s) => ({ id: uid(), reps: s.reps, weight: s.weight })) };
-  }
+  const rows = last && last.sets.length ? last.sets.length : defaultSetCount(type);
   const sets = [];
-  for (let i = 0; i < defaultSetCount(type); i++) sets.push({ id: uid(), reps: '', weight: '' });
+  for (let i = 0; i < rows; i++) sets.push({ id: uid(), reps: '', weight: '' });
   return { id: uid(), name: te.name, sets };
 }
 

@@ -7,7 +7,10 @@ everything is stored on your own device.
   Legs light yellow, Abs light green, Cardio light gray). Abs and cardio are their
   own workouts and get their own smaller blocks.
 - **Workouts** — each one is a reusable list of exercises. Sets, reps and weight are
-  entered when you log, and each exercise opens prefilled with what you did last time.
+  entered when you log. Each exercise opens with last time's numbers as ghosts behind
+  empty fields: tap **+** once to take them as-is, or type over them. Whatever you
+  enter turns solid, so you can see what you've done today. Lock a finished exercise
+  to freeze it.
 - **Stats** — per-exercise progression, weekly volume, and training frequency against
   a weekly target.
 

@@ -1,5 +1,8 @@
 /* The gym-fast logging screen.
-   Opens pre-built from a workout, with the numbers you used last time filled in. */
+   Opens pre-built from a workout, with last time's numbers showing as ghosts
+   behind empty fields — enter one and it turns solid, so at a glance you can
+   tell what you've already done today. Lock an exercise when you're finished
+   with it and it stops being editable. */
 
 import {
   state, uid, save, saveNow, num, TYPES, TYPE_LABEL, unitsFor,
@@ -43,6 +46,10 @@ export function renderEditor(view, sessionId, params) {
   let s;
   if (editing) {
     s = JSON.parse(JSON.stringify(editing));
+    // A saved session opens protected: every exercise is locked until you tap
+    // it open, so opening history to fix one number can't rewrite the rest.
+    // Sessions logged before locks existed have no flag, so they lock too.
+    s.exercises.forEach((ex) => { ex.locked = ex.locked !== false; });
   } else if (state.draft && state.draft.date === (params.date || todayISO()) &&
              (state.draft.templateId || '') === (params.tpl || '')) {
     s = state.draft;                       // resume an interrupted session
@@ -55,15 +62,33 @@ export function renderEditor(view, sessionId, params) {
   const isNew = !editing;
   if (isNew) { state.draft = s; save(); }
 
+  /* What you did last time, per exercise — refreshed on every paint. It drives
+     both the ghost numbers in the fields and what the steppers adopt on their
+     first press. lastPerformance() walks the whole history, so it's looked up
+     once here rather than per set row. */
+  let prev = [];
+
   paint();
 
   function touch() {
     if (isNew) { state.draft = s; save(); }
   }
 
+  /* Update what a card's own state controls — the lock button and the done
+     counter — without repainting, which would close the keyboard mid-entry. */
+  function syncCard(i) {
+    const card = view.querySelector(`[data-ex="${i}"]`);
+    const lock = card && card.querySelector('[data-lock]');
+    if (lock) lock.disabled = !started(s.exercises[i]);
+
+    const counter = view.querySelector('[data-progress]');
+    if (counter) counter.textContent = progressLabel();
+  }
+
   function paint() {
     const title = s.templateName || TYPE_LABEL[s.type];
     const u = unitsFor(s.type);
+    prev = s.exercises.map((ex) => lastPerformance(ex.name, s.date, s.id));
 
     view.innerHTML = `
       <header class="screen-head bordered">
@@ -83,7 +108,7 @@ export function renderEditor(view, sessionId, params) {
         ${TYPES.map((t) => `<button class="c-${t} ${s.type === t ? 'on' : ''}" data-type="${t}">${TYPE_LABEL[t]}</button>`).join('')}
       </div>
 
-      <div class="section-label">Exercises</div>
+      <div class="section-label">Exercises<span class="sl-count" data-progress>${progressLabel()}</span></div>
       <div class="pad stack">
         ${s.exercises.map((ex, i) => exerciseCard(ex, i, u)).join('')}
         <button class="btn ghost" data-add-ex>${icon('plus')} Add exercise</button>
@@ -106,41 +131,111 @@ export function renderEditor(view, sessionId, params) {
     wire();
   }
 
+  /* Last time's numbers for one set row, or null. */
+  function ghostFor(i, j) {
+    const p = prev[i];
+    return (p && p.sets[j]) || null;
+  }
+
+  function entered(set) {
+    return num(set.reps) > 0 || num(set.weight) > 0;
+  }
+
+  /* An exercise counts as done today once anything is entered against it. */
+  function started(ex) {
+    return (ex.sets || []).some(entered);
+  }
+
+  function progressLabel() {
+    if (!s.exercises.length) return '';
+    const done = s.exercises.filter((ex) => ex.locked || started(ex)).length;
+    return `${done} / ${s.exercises.length} done`;
+  }
+
   function exerciseCard(ex, i, u) {
-    const prev = lastPerformance(ex.name, s.date, s.id);
-    const hint = prev
-      ? `<b>Last ${fmtDate(prev.date, { day: 'numeric', month: 'short' })}:</b> ${prev.sets.map((x) => `${fmtNum(x.reps)}×${fmtNum(x.weight)}`).join('  ')}`
+    if (ex.locked) return lockedCard(ex, i, u);
+
+    const p = prev[i];
+    const hint = p
+      ? `<b>Last</b> ${esc(fmtDate(p.date, { day: 'numeric', month: 'short' }))}`
       : 'First time logging this one';
+
+    // Only worth offering while a blank row still has a ghost behind it.
+    const repeatable = p && ex.sets.some((set, j) => !entered(set) && p.sets[j]);
 
     return `
       <div class="ex-card" data-ex="${i}">
         <div class="ex-head">
           <div class="ex-name">${esc(ex.name)}</div>
+          <button class="lock-btn" data-lock="${i}" aria-pressed="false"
+                  aria-label="Lock ${esc(ex.name)}"${started(ex) ? '' : ' disabled'}>${icon('unlock')}</button>
           <button class="icon-btn plain" data-rm-ex="${i}" aria-label="Remove exercise">${icon('close')}</button>
         </div>
         <div class="ex-last">${hint}</div>
-        ${ex.sets.map((set, j) => `
-          <div class="set-row">
-            <span class="set-idx">${j + 1}</span>
-            <div class="stepper">
-              <button data-step="${i}:${j}:reps:-${u.stepA}">−</button>
-              <input inputmode="${u.a === 'REPS' ? 'numeric' : 'decimal'}" enterkeyhint="next"
-                     data-in="${i}:${j}:reps" value="${esc(set.reps)}" placeholder="0">
-              <span class="unit">${u.a}</span>
-              <button data-step="${i}:${j}:reps:${u.stepA}">+</button>
-            </div>
-            <div class="stepper">
-              <button data-step="${i}:${j}:weight:-${u.stepB}">−</button>
-              <input inputmode="decimal" enterkeyhint="next"
-                     data-in="${i}:${j}:weight" value="${esc(set.weight)}" placeholder="0">
-              <span class="unit">${u.b}</span>
-              <button data-step="${i}:${j}:weight:${u.stepB}">+</button>
-            </div>
-            <button class="set-del" data-rm-set="${i}:${j}" aria-label="Remove set">${icon('close')}</button>
-          </div>`).join('')}
+        ${ex.sets.map((set, j) => setRow(set, i, j, u)).join('')}
         <div class="ex-foot">
           <button class="mini-btn" data-add-set="${i}">+ Set</button>
+          ${repeatable ? `<button class="mini-btn" data-same="${i}">Same as last time</button>` : ''}
         </div>
+      </div>`;
+  }
+
+  /* Fields open empty. Last time's numbers sit behind them as placeholders, so
+     a dim number reads as "not done yet" and a solid one as "done today". */
+  function setRow(set, i, j, u) {
+    const g = ghostFor(i, j);
+    const ga = g && g.reps !== '' ? fmtNum(g.reps) : '0';
+    const gb = g && g.weight !== '' ? fmtNum(g.weight) : '0';
+
+    return `
+      <div class="set-row">
+        <span class="set-idx">${j + 1}</span>
+        <div class="stepper">
+          <button data-step="${i}:${j}:reps:-${u.stepA}" aria-label="Less">−</button>
+          <input inputmode="${u.a === 'REPS' ? 'numeric' : 'decimal'}" enterkeyhint="next"
+                 data-in="${i}:${j}:reps" value="${esc(set.reps)}" placeholder="${esc(ga)}">
+          <span class="unit">${u.a}</span>
+          <button data-step="${i}:${j}:reps:${u.stepA}" aria-label="More">+</button>
+        </div>
+        <div class="stepper">
+          <button data-step="${i}:${j}:weight:-${u.stepB}" aria-label="Less">−</button>
+          <input inputmode="decimal" enterkeyhint="next"
+                 data-in="${i}:${j}:weight" value="${esc(set.weight)}" placeholder="${esc(gb)}">
+          <span class="unit">${u.b}</span>
+          <button data-step="${i}:${j}:weight:${u.stepB}" aria-label="More">+</button>
+        </div>
+        <button class="set-del" data-rm-set="${i}:${j}" aria-label="Remove set">${icon('close')}</button>
+      </div>`;
+  }
+
+  /* Locked: the exercise stops being a form and becomes a record of what you
+     did. No inputs at all, so there is nothing left to mis-tap between sets. */
+  function lockedCard(ex, i, u) {
+    const cardio = s.type === 'cardio';
+    const ua = u.a.toLowerCase(), ub = u.b.toLowerCase();
+
+    // One row per set, numbered like the form it replaces, so a locked card
+    // still reads top to bottom in the order you entered it.
+    const done = ex.sets.map((set, j) => {
+      const val = cardio
+        ? `<b>${fmtNum(set.reps)}</b> ${ua}${num(set.weight) ? ` · <b>${fmtNum(set.weight)}</b> ${ub}` : ''}`
+        : `<b>${num(set.reps)}</b> × <b>${fmtNum(set.weight)}</b>${ub}`;
+      return `
+        <div class="done-row">
+          <span class="set-idx">${j + 1}</span>
+          <span class="done-set">${val}</span>
+        </div>`;
+    }).join('');
+
+    return `
+      <div class="ex-card locked" data-ex="${i}">
+        <div class="ex-head">
+          <span class="ex-tick">${icon('check')}</span>
+          <div class="ex-name">${esc(ex.name)}</div>
+          <button class="lock-btn on" data-lock="${i}" aria-pressed="true"
+                  aria-label="Unlock ${esc(ex.name)}">${icon('lock')}</button>
+        </div>
+        <div class="ex-done">${done}</div>
       </div>`;
   }
 
@@ -163,6 +258,7 @@ export function renderEditor(view, sessionId, params) {
         const [i, j, field] = inp.dataset.in.split(':');
         s.exercises[+i].sets[+j][field] = inp.value;
         touch();
+        syncCard(+i);
       });
       inp.addEventListener('focus', () => inp.select());
     });
@@ -170,17 +266,53 @@ export function renderEditor(view, sessionId, params) {
     view.querySelectorAll('[data-step]').forEach((b) => b.addEventListener('click', () => {
       const [i, j, field, delta] = b.dataset.step.split(':');
       const set = s.exercises[+i].sets[+j];
-      const next = Math.max(0, Math.round((num(set[field]) + Number(delta)) * 100) / 100);
+      const g = ghostFor(+i, +j);
+      const ghost = g ? g[field] : '';
+
+      // First press on an untouched field takes last time's number as it stands:
+      // repeating a lift is one tap, beating it is two.
+      const next = (set[field] === '' && ghost !== '' && ghost != null)
+        ? num(ghost)
+        : Math.max(0, Math.round((num(set[field]) + Number(delta)) * 100) / 100);
+
       set[field] = String(next);
       const inp = view.querySelector(`[data-in="${i}:${j}:${field}"]`);
       if (inp) inp.value = set[field];
       touch();
+      syncCard(+i);
+    }));
+
+    // Repeat last time in one tap, without overwriting anything already entered.
+    view.querySelectorAll('[data-same]').forEach((b) => b.addEventListener('click', () => {
+      const i = +b.dataset.same;
+      const ex = s.exercises[i];
+      ex.sets.forEach((set, j) => {
+        const g = ghostFor(i, j);
+        if (!g) return;
+        if (set.reps === '') set.reps = g.reps == null ? '' : String(g.reps);
+        if (set.weight === '') set.weight = g.weight == null ? '' : String(g.weight);
+      });
+      touch(); paint();
+    }));
+
+    view.querySelectorAll('[data-lock]').forEach((b) => b.addEventListener('click', () => {
+      const ex = s.exercises[+b.dataset.lock];
+      if (ex.locked) {
+        ex.locked = false;
+      } else {
+        if (!started(ex)) return;
+        // Locking commits what you actually did: rows you never filled in are
+        // dropped now rather than silently at save, so the card matches the record.
+        ex.sets = ex.sets.filter(entered);
+        ex.locked = true;
+      }
+      touch(); paint();
     }));
 
     view.querySelectorAll('[data-add-set]').forEach((b) => b.addEventListener('click', () => {
-      const ex = s.exercises[+b.dataset.addSet];
-      const last = ex.sets[ex.sets.length - 1];
-      ex.sets.push({ id: uid(), reps: last ? last.reps : '', weight: last ? last.weight : '' });
+      // Blank, like every other row — if last time went this deep, the ghost for
+      // this index shows up behind it automatically.
+      s.exercises[+b.dataset.addSet].sets.push({ id: uid(), reps: '', weight: '' });
       touch(); paint();
     }));
 

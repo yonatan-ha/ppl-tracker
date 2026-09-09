@@ -579,6 +579,46 @@ button.list-row:active { background: var(--card); }
 .mini-btn:active { background: var(--surface-raised); color: var(--accent-2); border-color: var(--accent); transform: scale(.95); }
 .mini-btn.danger { color: var(--danger); }
 
+/* Prefilled numbers from last time are placeholders, not values: an exercise
+   you never touch today saves as nothing at all. Dim = not done yet, solid =
+   entered today. The set number lights up once the row has something in it. */
+.stepper input::placeholder { color: var(--slate-400); opacity: .42; font-weight: 600; }
+.set-row:has([data-in]:not(:placeholder-shown)) .set-idx { color: var(--accent-2); }
+
+.lock-btn {
+  position: relative; width: 40px; height: 40px; flex: none;
+  display: grid; place-items: center; border-radius: var(--r-sm);
+  color: var(--dimmer); background: var(--card-2); border: 1px solid var(--border-soft);
+  transition: all var(--t-fast) var(--ease-standard);
+}
+.lock-btn::after {
+  content: ''; position: absolute; top: 50%; left: 50%;
+  width: 46px; height: 46px; transform: translate(-50%, -50%);
+}
+.lock-btn svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.lock-btn:disabled { opacity: .28; }
+.lock-btn:not(:disabled):active { transform: scale(.9); border-color: var(--ok); }
+.lock-btn.on { color: var(--on-accent); background: var(--ok); border-color: var(--ok); }
+
+/* A locked exercise reads as finished, not as disabled — solid, not faded. */
+.ex-card.locked {
+  border-color: color-mix(in srgb, var(--ok) 40%, var(--border-soft));
+  background: color-mix(in srgb, var(--ok) 5%, var(--card));
+}
+.ex-card.locked .ex-head { padding-bottom: 6px; }
+.ex-tick { flex: none; width: 18px; height: 18px; display: grid; place-items: center; color: var(--ok); }
+.ex-tick svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+
+.ex-done { display: flex; flex-direction: column; gap: 6px; padding: 2px 12px 14px; }
+.done-row { display: flex; align-items: center; gap: 6px; }
+.done-set {
+  background: var(--card-2); border: 1px solid var(--border-soft); border-radius: var(--r-sm);
+  padding: 5px 10px; font-family: var(--font-mono); font-size: 12px; color: var(--dimmer);
+}
+.done-set b { color: var(--text); font-weight: 700; }
+
+.sl-count { float: right; color: var(--dim); letter-spacing: var(--tracking-wide); }
+
 .tpl-row {
   display: flex; align-items: center; gap: 4px;
   padding: 6px 8px 6px 12px; min-height: 52px;

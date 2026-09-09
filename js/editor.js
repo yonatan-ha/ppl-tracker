@@ -151,7 +151,12 @@ export function renderEditor(view, sessionId, params) {
      week, and the ghost says 40 — the number that actually repeats the lift. */
   function ghostFor(i, j) {
     const p = prev[i];
-    const set = p && p.sets[j];
+    if (!p || !p.sets || !p.sets.length) return null;
+
+    // Last time may have had fewer sets than today — common now that every
+    // exercise opens with two rows. Fall back to the nearest set it did have,
+    // rather than leaving the row with nothing behind it and a dead switch.
+    const set = p.sets[j] || p.sets[p.sets.length - 1];
     if (!set) return null;
 
     const from = machineFactor(p.machineId);
@@ -382,6 +387,23 @@ export function renderEditor(view, sessionId, params) {
       const ex = s.exercises[+b.dataset.skip];
       ex.skipped = !ex.skipped;
       if (ex.skipped) ex.locked = false;
+      touch(); paint();
+    }));
+
+    view.querySelectorAll('[data-machine]').forEach((b) => b.addEventListener('click', async () => {
+      const i = +b.dataset.machine;
+      const picked = await pickSheet({
+        title: `${s.exercises[i].name} — which cable?`,
+        options: sortedMachines().map((m) => ({
+          label: m.name,
+          sub: m.reference ? 'Reference · everything converts to this'
+             : isCalibrated(m) ? `Counts as ${fmtNum(m.factor * 100, 0)}% of ${referenceMachine().name}`
+             : 'Not calibrated yet — counts 1:1',
+          value: m.id
+        }))
+      });
+      if (!picked) return;
+      s.exercises[i].machineId = picked;
       touch(); paint();
     }));
 

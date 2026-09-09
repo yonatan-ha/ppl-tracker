@@ -11,7 +11,7 @@ const SCHEMA_VERSION = 6;
 
 /* Shown in Settings. Bumped on every ship so "I don't see it" can be answered
    by looking, instead of guessing whether a device is running old code. */
-export const BUILD = '2026-09-09 · cables 2';
+export const BUILD = '2026-09-09 · skip + per-set';
 
 /* Every type is a workout in its own right. MAIN_TYPES are the lifting days
    that count toward the weekly target; abs and cardio stand on their own. */
@@ -464,10 +464,10 @@ export function sessionFromTemplate(tpl, date) {
   };
 }
 
-/* How many blank set rows a brand-new exercise opens with. Lifting days start
-   at two because that's the fewest you'd ever log; abs and cardio start at one. */
+/* How many set rows an exercise opens with. Two everywhere you lift — that's
+   the standard — and one for cardio, where a second line means nothing. */
 export function defaultSetCount(type) {
-  return MAIN_TYPES.includes(type) ? 2 : 1;
+  return type === 'cardio' ? 1 : 2;
 }
 
 /* Opens an exercise with the *shape* of last time — the same number of set
@@ -477,7 +477,9 @@ export function defaultSetCount(type) {
    you never actually did. */
 export function prefillExercise(te, date, type) {
   const last = lastPerformance(te.name, date);
-  const rows = last && last.sets.length ? last.sets.length : defaultSetCount(type);
+  // Never fewer rows than you actually do. Sets can't be added by hand any
+  // more, so an exercise logged once with a single set must not stay stuck there.
+  const rows = Math.max(last ? last.sets.length : 0, defaultSetCount(type));
   const sets = [];
   for (let i = 0; i < rows; i++) sets.push({ id: uid(), reps: '', weight: '' });
 

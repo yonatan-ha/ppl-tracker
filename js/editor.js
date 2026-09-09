@@ -168,11 +168,12 @@ export function renderEditor(view, sessionId, params) {
 
   function progressLabel() {
     if (!s.exercises.length) return '';
-    const done = s.exercises.filter((ex) => ex.locked || started(ex)).length;
+    const done = s.exercises.filter((ex) => ex.locked || ex.skipped || started(ex)).length;
     return `${done} / ${s.exercises.length} done`;
   }
 
   function exerciseCard(ex, i, u) {
+    if (ex.skipped) return skippedCard(ex, i);
     if (ex.locked) return lockedCard(ex, i, u);
 
     const p = prev[i];
@@ -181,56 +182,31 @@ export function renderEditor(view, sessionId, params) {
           p.machineId ? ` · ${esc(machineName(p.machineId))}` : ''}`
       : 'First time logging this one';
 
-    // Only worth offering while a blank row still has a ghost behind it.
-    const repeatable = p && ex.sets.some((set, j) => !entered(set) && p.sets[j]);
-
     return `
       <div class="ex-card" data-ex="${i}">
         <div class="ex-head">
           <div class="ex-name">${esc(ex.name)}</div>
+          <button class="icon-btn plain" data-skip="${i}"
+                  aria-label="Skip ${esc(ex.name)}">${icon('skip')}</button>
           <button class="lock-btn" data-lock="${i}" aria-pressed="false"
                   aria-label="Lock ${esc(ex.name)}"${started(ex) ? '' : ' disabled'}>${icon('unlock')}</button>
-          <button class="icon-btn plain" data-rm-ex="${i}" aria-label="Remove exercise">${icon('close')}</button>
         </div>
         ${machineChip(ex, i)}
         <div class="ex-last">${hint}</div>
-        ${ex.sets.map((set, j) => setRow(set, i, j, u)).join('')}
-        <div class="ex-foot">
-          <button class="mini-btn" data-add-set="${i}">+ Set</button>
-          ${repeatable ? `<button class="mini-btn" data-same="${i}">Same as last time</button>` : ''}
+        <div class="ex-rows">
+          ${ex.sets.map((set, j) => setRow(set, i, j, u)).join('')}
         </div>
-      </div>`;
-  }
-
-  function machineName(id) {
-    const m = getMachine(id);
-    return m ? m.name : 'Unknown cable';
-  }
-
-  /* Which stack you're on. Only shown for the exercises that run on one, so
-     dumbbell work never asks you anything. */
-  function machineChip(ex, i, locked) {
-    if (!usesStack(ex.name)) return '';
-    const m = ex.machineId ? getMachine(ex.machineId) : null;
-    const warn = m && !isCalibrated(m) ? ' uncal' : '';
-    const label = m ? esc(m.name) : 'Which cable?';
-
-    if (locked) return `<div class="ex-gear"><span class="gear-chip on${warn}">${label}</span></div>`;
-
-    return `
-      <div class="ex-gear">
-        <button class="gear-chip${m ? ' on' : ''}${warn}" data-machine="${i}">
-          ${label}${m && !isCalibrated(m) ? ' · not calibrated' : ''}
-        </button>
       </div>`;
   }
 
   /* Fields open empty. Last time's numbers sit behind them as placeholders, so
-     a dim number reads as "not done yet" and a solid one as "done today". */
+     a dim number reads as "not done yet" and a solid one as "done today".
+     Each row carries its own button to take last time's numbers for that set. */
   function setRow(set, i, j, u) {
     const g = ghostFor(i, j);
     const ga = g && g.reps !== '' ? fmtNum(g.reps) : '0';
     const gb = g && g.weight !== '' ? fmtNum(g.weight) : '0';
+    const canRepeat = !!g && !entered(set);
 
     return `
       <div class="set-row">
@@ -249,7 +225,45 @@ export function renderEditor(view, sessionId, params) {
           <span class="unit">${u.b}</span>
           <button data-step="${i}:${j}:weight:${u.stepB}" aria-label="More">+</button>
         </div>
-        <button class="set-del" data-rm-set="${i}:${j}" aria-label="Remove set">${icon('close')}</button>
+        <button class="set-same" data-same="${i}:${j}"${canRepeat ? '' : ' disabled'}
+                aria-label="Use set ${j + 1} from last time">${icon('fill')}</button>
+      </div>`;
+  }
+
+  function machineName(id) {
+    const m = getMachine(id);
+    return m ? m.name : 'Unknown cable';
+  }
+
+  /* Which stack you're on. Only shown for the exercises that run on one, so
+     dumbbell and barbell work never asks you anything. */
+  function machineChip(ex, i, locked) {
+    if (!usesStack(ex.name)) return '';
+    const m = ex.machineId ? getMachine(ex.machineId) : null;
+    const warn = m && !isCalibrated(m) ? ' uncal' : '';
+    const label = m ? esc(m.name) : 'Which cable?';
+
+    if (locked) return `<div class="ex-gear"><span class="gear-chip on${warn}">${label}</span></div>`;
+
+    return `
+      <div class="ex-gear">
+        <button class="gear-chip${m ? ' on' : ''}${warn}" data-machine="${i}">
+          ${label}${m && !isCalibrated(m) ? ' · not calibrated' : ''}
+        </button>
+      </div>`;
+  }
+
+  /* Skipped: you didn't do it, so nothing is recorded. Not zero reps, not last
+     week's numbers carried forward — the exercise simply isn't in the session. */
+  function skippedCard(ex, i) {
+    return `
+      <div class="ex-card skipped" data-ex="${i}">
+        <div class="ex-head">
+          <span class="ex-skip-mark">${icon('skip')}</span>
+          <div class="ex-name">${esc(ex.name)}</div>
+          <button class="mini-btn" data-skip="${i}">Undo</button>
+        </div>
+        <div class="ex-skipped-note">Skipped — nothing recorded against this one.</div>
       </div>`;
   }
 
@@ -328,33 +342,21 @@ export function renderEditor(view, sessionId, params) {
       syncCard(+i);
     }));
 
-    // Repeat last time in one tap, without overwriting anything already entered.
+    // Repeat one set from last time, converted to today's cable if they differ.
     view.querySelectorAll('[data-same]').forEach((b) => b.addEventListener('click', () => {
-      const i = +b.dataset.same;
-      const ex = s.exercises[i];
-      ex.sets.forEach((set, j) => {
-        const g = ghostFor(i, j);
-        if (!g) return;
-        if (set.reps === '') set.reps = g.reps == null ? '' : String(g.reps);
-        if (set.weight === '') set.weight = g.weight == null ? '' : String(g.weight);
-      });
+      const [i, j] = b.dataset.same.split(':').map(Number);
+      const g = ghostFor(i, j);
+      if (!g) return;
+      const set = s.exercises[i].sets[j];
+      if (set.reps === '') set.reps = g.reps == null ? '' : String(g.reps);
+      if (set.weight === '') set.weight = g.weight == null ? '' : String(g.weight);
       touch(); paint();
     }));
 
-    view.querySelectorAll('[data-machine]').forEach((b) => b.addEventListener('click', async () => {
-      const i = +b.dataset.machine;
-      const picked = await pickSheet({
-        title: `${s.exercises[i].name} — which cable?`,
-        options: sortedMachines().map((m) => ({
-          label: m.name,
-          sub: m.reference ? 'Reference · everything converts to this'
-             : isCalibrated(m) ? `Counts as ${fmtNum(m.factor * 100, 0)}% of ${referenceMachine().name}`
-             : 'Not calibrated yet — counts 1:1',
-          value: m.id
-        }))
-      });
-      if (!picked) return;
-      s.exercises[i].machineId = picked;
+    view.querySelectorAll('[data-skip]').forEach((b) => b.addEventListener('click', () => {
+      const ex = s.exercises[+b.dataset.skip];
+      ex.skipped = !ex.skipped;
+      if (ex.skipped) ex.locked = false;
       touch(); paint();
     }));
 
@@ -369,24 +371,6 @@ export function renderEditor(view, sessionId, params) {
         ex.sets = ex.sets.filter(entered);
         ex.locked = true;
       }
-      touch(); paint();
-    }));
-
-    view.querySelectorAll('[data-add-set]').forEach((b) => b.addEventListener('click', () => {
-      // Blank, like every other row — if last time went this deep, the ghost for
-      // this index shows up behind it automatically.
-      s.exercises[+b.dataset.addSet].sets.push({ id: uid(), reps: '', weight: '' });
-      touch(); paint();
-    }));
-
-    view.querySelectorAll('[data-rm-set]').forEach((b) => b.addEventListener('click', () => {
-      const [i, j] = b.dataset.rmSet.split(':');
-      s.exercises[+i].sets.splice(+j, 1);
-      touch(); paint();
-    }));
-
-    view.querySelectorAll('[data-rm-ex]').forEach((b) => b.addEventListener('click', () => {
-      s.exercises.splice(+b.dataset.rmEx, 1);
       touch(); paint();
     }));
 
@@ -432,6 +416,7 @@ export function renderEditor(view, sessionId, params) {
     // Drop rows you never filled in; keep bodyweight sets (reps but no weight).
     const saved = JSON.parse(JSON.stringify(s));
     saved.exercises = saved.exercises
+      .filter((ex) => !ex.skipped)
       .map((ex) => ({ ...ex, sets: ex.sets.filter((x) => num(x.reps) > 0 || num(x.weight) > 0) }))
       .filter((ex) => ex.sets.length > 0);
 
@@ -439,14 +424,14 @@ export function renderEditor(view, sessionId, params) {
 
     // Exercise list drifted from the workout? Offer to make it permanent.
     const tpl = saved.templateId ? getTemplate(saved.templateId) : null;
-    if (tpl && !matchesTemplate(saved, tpl)) {
+    if (tpl && !matchesTemplate({ exercises: s.exercises }, tpl)) {
       const ok = await confirmSheet({
         title: `Update ${tpl.name}?`,
         message: 'You changed the exercise list. Save it to this workout for next time, or keep it as a one-off.',
         confirmLabel: `Update ${tpl.name}`
       });
       if (ok) {
-        tpl.exercises = saved.exercises.map((ex) => ({ id: uid(), name: ex.name }));
+        tpl.exercises = s.exercises.map((ex) => ({ id: uid(), name: ex.name }));
         upsertTemplate(tpl);
       }
     }

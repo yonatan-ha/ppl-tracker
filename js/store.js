@@ -7,11 +7,11 @@ import {
 } from './storage.js';
 
 const STORAGE_KEY = 'ppl.v1';
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 
 /* Shown in Settings. Bumped on every ship so "I don't see it" can be answered
    by looking, instead of guessing whether a device is running old code. */
-export const BUILD = '2026-09-09 · cables';
+export const BUILD = '2026-09-09 · cables 2';
 
 /* Every type is a workout in its own right. MAIN_TYPES are the lifting days
    that count toward the weekly target; abs and cardio stand on their own. */
@@ -44,7 +44,7 @@ function blankState() {
     templates: [],
     exerciseLibrary: SEED_EXERCISES.map((e) => ({ name: e.name, type: e.type })),
     machines: SEED_MACHINES.map((m) => ({ id: uid(), ...m })),
-    stackExercises: [...SEED_STACK_EXERCISES],
+    stackExercises: seedStack(),
     draft: null
   };
 }
@@ -129,14 +129,36 @@ function migrate(data) {
     if (!Array.isArray(out.machines) || !out.machines.length) {
       out.machines = SEED_MACHINES.map((m) => ({ id: uid(), ...m }));
     }
-    if (!Array.isArray(out.stackExercises)) out.stackExercises = [...SEED_STACK_EXERCISES];
+    if (!Array.isArray(out.stackExercises)) out.stackExercises = seedStack();
   }
 
-  // v4 -> v5: the stack list held lowercased keys, which matched fine but read
-  // badly on screen. Keep the name as written and match case-insensitively.
-  if ((data.version || 1) < 5) {
-    out.stackExercises = (out.stackExercises || []).map((n) =>
-      SEED_STACK_EXERCISES.find((s) => s.toLowerCase() === String(n).trim().toLowerCase()) || n);
+  // v5 -> v6: bind by wording instead of exact text, and adopt whatever you
+  // actually call each movement. Scanning your own log means the cables attach
+  // to "Tricep Pushdowns" without anyone having to retype anything.
+  if ((data.version || 1) < 6) {
+    const seeds = seedStack();
+    const kept = (out.stackExercises || [])
+      .filter((x) => x && typeof x === 'object' && Array.isArray(x.match))
+      .filter((x) => !seeds.some((s) => s.name === x.name));
+    out.stackExercises = seeds.concat(kept);
+
+    // Every exercise name this log has seen, weighted by how much it counts as
+    // evidence of what you call things.
+    const seen = new Map();
+    const note = (n, weight) => {
+      const k = String(n || '').trim();
+      if (k) seen.set(k, (seen.get(k) || 0) + weight);
+    };
+    for (const s of out.sessions || []) for (const x of s.exercises || []) note(x.name, 3);
+    for (const t of out.templates || []) for (const x of t.exercises || []) note(x.name, 2);
+
+    for (const entry of out.stackExercises) {
+      let best = null, bestScore = 0;
+      for (const [name, score] of seen) {
+        if (score > bestScore && matchesGroups(name, entry.match)) { best = name; bestScore = score; }
+      }
+      if (best) entry.name = best;          // call it what you call it
+    }
   }
 
   out.version = SCHEMA_VERSION;
@@ -493,12 +515,88 @@ export const SEED_MACHINES = [
   { name: 'Cable 3', factor: null, reference: false }
 ];
 
-/* Exercises performed on one of those stacks, held as lowercased names. */
+/* Exercises performed on those stacks.
+
+   Bound by wording, not exact text. The same movement gets written a dozen
+   ways — "Tricep Pushdowns", "Triceps Pushdown", "Rope Push Down" — and making
+   you retype the app's spelling to get a feature is a bad trade. An entry
+   matches when the exercise has at least one word from each of its groups. */
 export const SEED_STACK_EXERCISES = [
-  'Triceps Pushdown',
-  'Overhead Triceps Extension',
-  'Single-Arm Lat Pulldown'
+  { name: 'Triceps Pushdown', match: [['pushdown']] },
+  { name: 'Overhead Triceps Extension', match: [['overhead'], ['extension', 'ext']] },
+  { name: 'Single-Arm Lat Pulldown',
+    match: [['single', 'one', 'unilateral'], ['arm'], ['lat', 'pulldown', 'pull']] }
 ];
+
+function seedStack() {
+  return SEED_STACK_EXERCISES.map((s) => ({ name: s.name, match: s.match.map((g) => [...g]) }));
+}
+
+/* Words in a name, singularised, plus adjacent pairs joined — so "push down"
+   and "pushdown" are the same thing, and so are "1 arm" and "one arm". */
+function wordsOf(name) {
+  const list = String(name || '')
+    .toLowerCase()
+    .replace(/\b1\b/g, 'one')
+    .replace(/[^a-z]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(singular);
+  const set = new Set(list);
+  for (let i = 0; i < list.length - 1; i++) set.add(list[i] + list[i + 1]);
+  return set;
+}
+
+function singular(w) {
+  if (w.endsWith('ses')) return w.slice(0, -2);            // presses -> press
+  if (w.endsWith('ss')) return w;                          // press stays press
+  return w.endsWith('s') && w.length > 3 ? w.slice(0, -1) : w;
+}
+
+function matchesGroups(name, groups) {
+  if (!groups || !groups.length) return false;
+  const words = wordsOf(name);
+  return groups.every((g) => g.some((w) => words.has(w)));
+}
+
+/* A pattern from a name you typed: every significant word has to be there. */
+function groupsFromName(name) {
+  return String(name || '')
+    .toLowerCase()
+    .replace(/\b1\b/g, 'one')
+    .replace(/[^a-z]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter((w) => w.length > 2)
+    .map((w) => [singular(w)]);
+}
+
+function entryMatches(entry, name) {
+  if (!entry) return false;
+  if (typeof entry === 'string') return matchesGroups(name, groupsFromName(entry));
+  return matchesGroups(name, entry.match && entry.match.length ? entry.match : groupsFromName(entry.name));
+}
+
+/* Is this exercise done on one of the calibrated stacks? */
+export function usesStack(name) {
+  return (state.stackExercises || []).some((e) => entryMatches(e, name));
+}
+
+/* The list as shown on the Cables screen, in whatever wording it settled on. */
+export function stackExerciseNames() {
+  return (state.stackExercises || []).map((e) => (typeof e === 'string' ? e : e.name));
+}
+
+export function setUsesStack(name, on) {
+  const clean = String(name || '').trim();
+  if (!clean) return;
+  const list = state.stackExercises || (state.stackExercises = []);
+  const i = list.findIndex((e) => entryMatches(e, clean));
+  if (on && i < 0) list.push({ name: clean, match: groupsFromName(clean) });
+  if (!on && i >= 0) list.splice(i, 1);
+  saveNow();
+}
 
 /* Reference first, then the order they were added. */
 export function sortedMachines() {
@@ -541,33 +639,6 @@ export function isCalibrated(m) {
 export function machineFactor(id) {
   const m = getMachine(id);
   return isCalibrated(m) ? (m.reference ? 1 : m.factor) : 1;
-}
-
-/* Is this exercise done on one of the calibrated stacks? Matching ignores case
-   and spacing so "Tricep Pushdowns" and "Triceps Pushdown" aren't two things. */
-export function usesStack(name) {
-  const key = stackKey(name);
-  return !!key && (state.stackExercises || []).some((n) => stackKey(n) === key);
-}
-
-function stackKey(name) {
-  return String(name || '').trim().toLowerCase().replace(/s+/g, ' ');
-}
-
-/* The list itself, exactly as written — this is what the Cables screen shows,
-   so an exercise you added stays listed whether or not it's in the library. */
-export function stackExerciseNames() {
-  return [...(state.stackExercises || [])];
-}
-
-export function setUsesStack(name, on) {
-  const key = stackKey(name);
-  if (!key) return;
-  const list = state.stackExercises || (state.stackExercises = []);
-  const i = list.findIndex((n) => stackKey(n) === key);
-  if (on && i < 0) list.push(String(name).trim());
-  if (!on && i >= 0) list.splice(i, 1);
-  saveNow();
 }
 
 /* Which stack an exercise was on last time, so logging it again defaults to

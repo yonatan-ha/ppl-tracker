@@ -83,6 +83,15 @@ export function renderEditor(view, sessionId, params) {
     const lock = card && card.querySelector('[data-lock]');
     if (lock) lock.disabled = !started(s.exercises[i]);
 
+    // Typing or stepping can move a row off last time's numbers; the switch has
+    // to follow without a repaint, which would close the keyboard.
+    if (card) card.querySelectorAll('[data-same]').forEach((b) => {
+      const j = Number(b.dataset.same.split(':')[1]);
+      const lit = matchesGhost(s.exercises[i].sets[j], ghostFor(i, j));
+      b.classList.toggle('on', lit);
+      b.setAttribute('aria-pressed', String(lit));
+    });
+
     const counter = view.querySelector('[data-progress]');
     if (counter) counter.textContent = progressLabel();
   }
@@ -157,6 +166,14 @@ export function renderEditor(view, sessionId, params) {
     return String(Math.round(v * 100) / 100);
   }
 
+  /* On means this row is showing exactly what you did last time. Derived from
+     the numbers rather than a flag, so it can never disagree with the fields. */
+  function matchesGhost(set, g) {
+    if (!g) return false;
+    const same = (a, b) => String(a == null ? '' : a) === String(b == null ? '' : b);
+    return same(set.reps, g.reps) && same(set.weight, g.weight);
+  }
+
   function entered(set) {
     return num(set.reps) > 0 || num(set.weight) > 0;
   }
@@ -206,7 +223,7 @@ export function renderEditor(view, sessionId, params) {
     const g = ghostFor(i, j);
     const ga = g && g.reps !== '' ? fmtNum(g.reps) : '0';
     const gb = g && g.weight !== '' ? fmtNum(g.weight) : '0';
-    const canRepeat = !!g && !entered(set);
+    const on = matchesGhost(set, g);
 
     return `
       <div class="set-row">
@@ -225,8 +242,9 @@ export function renderEditor(view, sessionId, params) {
           <span class="unit">${u.b}</span>
           <button data-step="${i}:${j}:weight:${u.stepB}" aria-label="More">+</button>
         </div>
-        <button class="set-same" data-same="${i}:${j}"${canRepeat ? '' : ' disabled'}
-                aria-label="Use set ${j + 1} from last time">${icon('fill')}</button>
+        <button class="set-same${on ? ' on' : ''}" data-same="${i}:${j}"
+                aria-pressed="${on}"${g ? '' : ' disabled'}
+                aria-label="Same as last time, set ${j + 1}">${icon('fill')}</button>
       </div>`;
   }
 
@@ -342,14 +360,21 @@ export function renderEditor(view, sessionId, params) {
       syncCard(+i);
     }));
 
-    // Repeat one set from last time, converted to today's cable if they differ.
+    // Same as last time, per set — a switch, not a one-shot. On fills the row
+    // with last time's numbers (converted if you've moved cable); off empties it
+    // again, which leaves the ghost showing through as it was before.
     view.querySelectorAll('[data-same]').forEach((b) => b.addEventListener('click', () => {
       const [i, j] = b.dataset.same.split(':').map(Number);
       const g = ghostFor(i, j);
       if (!g) return;
       const set = s.exercises[i].sets[j];
-      if (set.reps === '') set.reps = g.reps == null ? '' : String(g.reps);
-      if (set.weight === '') set.weight = g.weight == null ? '' : String(g.weight);
+      if (matchesGhost(set, g)) {
+        set.reps = '';
+        set.weight = '';
+      } else {
+        set.reps = g.reps == null ? '' : String(g.reps);
+        set.weight = g.weight == null ? '' : String(g.weight);
+      }
       touch(); paint();
     }));
 

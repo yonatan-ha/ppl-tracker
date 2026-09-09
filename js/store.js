@@ -11,7 +11,7 @@ const SCHEMA_VERSION = 6;
 
 /* Shown in Settings. Bumped on every ship so "I don't see it" can be answered
    by looking, instead of guessing whether a device is running old code. */
-export const BUILD = '2026-09-09 · skip + per-set';
+export const BUILD = '2026-09-09 · repeat toggle';
 
 /* Every type is a workout in its own right. MAIN_TYPES are the lifting days
    that count toward the weekly target; abs and cardio stand on their own. */

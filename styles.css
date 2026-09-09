@@ -638,8 +638,13 @@ button.gear-chip:active { transform: scale(.95); }
   transition: all var(--t-fast) var(--ease-standard);
 }
 .set-same svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.set-same:not(:disabled):active { transform: scale(.92); border-style: solid; border-color: var(--accent); color: var(--accent-2); }
-.set-same:disabled { opacity: .2; border-style: solid; }
+.set-same:not(:disabled):active { transform: scale(.92); }
+.set-same.on {
+  border-style: solid; border-color: var(--accent);
+  background: var(--accent-soft); color: var(--accent-2);
+  box-shadow: var(--glow-primary);
+}
+.set-same:disabled { opacity: .18; border-style: solid; }
 
 /* Skipped reads as absent, not as finished: no fill, no glow, nothing logged. */
 .ex-card.skipped { background: transparent; border-style: dashed; box-shadow: none; }

@@ -6,7 +6,7 @@ import {
 } from './store.js';
 import { isDurable, canPersist, IS_FRAMED } from './storage.js';
 import {
-  closeSheet, isSheetOpen, icon, esc, toast, confirmSheet, withBusy, paintBrandMarks
+  closeSheet, isSheetOpen, icon, esc, toast, toastSaveResult, confirmSheet, withBusy, paintBrandMarks
 } from './ui.js';
 import { renderCalendar } from './calendar.js';
 import { renderStats } from './stats.js';
@@ -158,8 +158,7 @@ function renderStorageWarning(root) {
 
   bar.querySelector('[data-warn-export]').addEventListener('click', (e) =>
     withBusy(e.currentTarget, 'Exporting…', async () => {
-      await exportJSON();
-      toast('Backup downloaded', 'ok');
+      toastSaveResult(await exportJSON(), 'Backup saved');
     }));
 
   const file = bar.querySelector('[data-warn-file]');
@@ -211,8 +210,7 @@ function renderRecovery(target) {
 
   target.querySelector('[data-rec-raw]').addEventListener('click', (e) =>
     withBusy(e.currentTarget, 'Preparing…', async () => {
-      await exportRawBackup();
-      toast('Downloaded', 'ok');
+      toastSaveResult(await exportRawBackup(), 'Saved');
     }));
 
   const file = target.querySelector('[data-rec-file]');

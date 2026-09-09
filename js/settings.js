@@ -2,7 +2,7 @@
 
 import { state, save, saveNow, exportJSON, importJSON, resetAll, hasSaveError } from './store.js';
 import { isDurable, canPersist, storageBackend, IS_FRAMED } from './storage.js';
-import { esc, icon, toast, confirmSheet, withBusy } from './ui.js';
+import { esc, icon, toast, toastSaveResult, confirmSheet, withBusy } from './ui.js';
 import { go, back } from './app.js';
 
 function storageStatus() {
@@ -110,8 +110,8 @@ export function renderSettings(view) {
 
   view.querySelector('[data-export]').addEventListener('click', async (e) => {
     await withBusy(e.currentTarget, 'Exporting…', async () => {
-      exportJSON();
-      toast(`Backup of ${state.sessions.length} sessions downloaded`, 'ok');
+      const count = state.sessions.length;
+      toastSaveResult(await exportJSON(), `Backup of ${count} session${count === 1 ? '' : 's'} saved`);
     });
     renderSettings(view);
   });

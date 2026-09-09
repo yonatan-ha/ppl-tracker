@@ -192,6 +192,14 @@ export function pickSheet({ title, options }) {
   });
 }
 
+/* Report how a file save actually went. The viewer can decline, and some
+   contexts can't save at all, so "downloaded" is never safe to assume. */
+export function toastSaveResult(result, savedMessage) {
+  if (result === 'saved') toast(savedMessage, 'ok');
+  else if (result === 'declined') toast('Export cancelled', 'info');
+  else toast('Couldn’t save the file here', 'error');
+}
+
 /* ---------------- formatting ---------------- */
 
 export function fmtNum(n, digits = 1) {

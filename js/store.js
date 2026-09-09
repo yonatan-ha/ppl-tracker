@@ -442,21 +442,85 @@ export function matchesTemplate(session, tpl) {
   return a === b;
 }
 
-/* ---------------- export / import ---------------- */
+/* ---------------- saving a file ---------------- */
 
-export function exportJSON() {
-  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+/* On an ordinary origin an <a download> is all it takes. Inside the artifact
+   viewer the page is framed and framed pages are never allowed to download
+   anything, so that link silently does nothing — which made Export look like it
+   worked while producing no file at all. There the file has to go through the
+   viewer's downloads capability, which asks before saving.
+
+   Resolves 'saved' | 'declined' | 'failed'. Never claim a backup exists on a
+   guess: the whole point of this file is being able to trust it. */
+export async function saveFile(filename, text) {
+  const downloads = await downloadsCapability();
+
+  if (downloads) {
+    try {
+      await downloads.save({ filename, data: text });
+      return 'saved';
+    } catch (err) {
+      if (err && err.code === 'declined') return 'declined';
+      console.error('Save refused:', err);
+      return 'failed';
+    }
+  }
+
+  // No capability here. A link works on a real origin; inside a frame it does
+  // nothing, and saying "downloaded" would be the exact lie this replaces.
+  if (IS_FRAMED) return 'failed';
+  try {
+    linkDownload(filename, text);
+    return 'saved';
+  } catch (err) {
+    console.error('Save failed:', err);
+    return 'failed';
+  }
+}
+
+/* The viewer's downloads capability, or null when this copy isn't running in
+   one (a hosted origin, localhost, a saved file). Asked for once and reused —
+   it resolves asynchronously and only after the viewer has answered. */
+let downloadsPromise;
+function downloadsCapability() {
+  if (downloadsPromise === undefined) {
+    downloadsPromise = (async () => {
+      try {
+        const claude = typeof window !== 'undefined' ? window.claude : null;
+        if (!claude || typeof claude.use !== 'function') return null;
+        return await claude.use('downloads');
+      } catch (err) {
+        return null;
+      }
+    })();
+  }
+  return downloadsPromise;
+}
+
+function linkDownload(filename, text) {
+  const blob = new Blob([text], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `ppl-backup-${todayISO()}.json`;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-  state.settings.lastExportAt = Date.now();
-  state.settings.sessionsSinceExport = 0;
-  saveNow();
+}
+
+/* ---------------- export / import ---------------- */
+
+export async function exportJSON() {
+  const result = await saveFile(`ppl-backup-${todayISO()}.json`, JSON.stringify(state, null, 2));
+  // Only count it as a backup once the file actually reached you — otherwise
+  // "last export" would go on reassuring you about a file that never existed.
+  if (result === 'saved') {
+    state.settings.lastExportAt = Date.now();
+    state.settings.sessionsSinceExport = 0;
+    saveNow();
+  }
+  return result;
 }
 
 export function importJSON(text) {
@@ -472,15 +536,7 @@ export function importJSON(text) {
    when the app can't parse it but you don't want to lose it. */
 export function exportRawBackup() {
   const text = (loadFailure && loadFailure.raw) || JSON.stringify(state, null, 2);
-  const blob = new Blob([text], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `ppl-raw-${todayISO()}.json`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return saveFile(`ppl-raw-${todayISO()}.json`, text);
 }
 
 export function resetAll() {

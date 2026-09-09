@@ -8,7 +8,7 @@
 
 import {
   uid, sortedMachines, getMachine, referenceMachine, upsertMachine, deleteMachine,
-  isCalibrated, usesStack, setUsesStack, allExerciseNames, num
+  isCalibrated, setUsesStack, stackExerciseNames, num
 } from './store.js';
 import { esc, icon, toast, openSheet, closeSheet, confirmSheet, fmtNum } from './ui.js';
 import { back } from './app.js';
@@ -17,7 +17,7 @@ import { pickExerciseSheet } from './editor.js';
 export function renderMachines(view) {
   const machines = sortedMachines();
   const ref = referenceMachine();
-  const stackNames = allExerciseNames().filter((e) => usesStack(e.name));
+  const stackNames = stackExerciseNames();
 
   view.innerHTML = `
     <header class="screen-head bordered">
@@ -47,10 +47,10 @@ export function renderMachines(view) {
     </div>
 
     <div class="section-label">Exercises on these cables</div>
-    ${stackNames.length ? stackNames.map((e) => `
+    ${stackNames.length ? stackNames.map((name) => `
       <div class="list-row">
-        <span class="lr-main"><span class="lr-title">${esc(e.name)}</span></span>
-        <button class="icon-btn plain" data-drop="${esc(e.name)}" aria-label="Remove ${esc(e.name)}">${icon('close')}</button>
+        <span class="lr-main"><span class="lr-title">${esc(name)}</span></span>
+        <button class="icon-btn plain" data-drop="${esc(name)}" aria-label="Remove ${esc(name)}">${icon('close')}</button>
       </div>`).join('') : `
       <div class="pad tiny muted center" style="padding:14px 8px">None yet.</div>`}
 

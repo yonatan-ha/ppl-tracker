@@ -7,7 +7,11 @@ import {
 } from './storage.js';
 
 const STORAGE_KEY = 'ppl.v1';
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
+
+/* Shown in Settings. Bumped on every ship so "I don't see it" can be answered
+   by looking, instead of guessing whether a device is running old code. */
+export const BUILD = '2026-09-09 · cables';
 
 /* Every type is a workout in its own right. MAIN_TYPES are the lifting days
    that count toward the weekly target; abs and cardio stand on their own. */
@@ -126,6 +130,13 @@ function migrate(data) {
       out.machines = SEED_MACHINES.map((m) => ({ id: uid(), ...m }));
     }
     if (!Array.isArray(out.stackExercises)) out.stackExercises = [...SEED_STACK_EXERCISES];
+  }
+
+  // v4 -> v5: the stack list held lowercased keys, which matched fine but read
+  // badly on screen. Keep the name as written and match case-insensitively.
+  if ((data.version || 1) < 5) {
+    out.stackExercises = (out.stackExercises || []).map((n) =>
+      SEED_STACK_EXERCISES.find((s) => s.toLowerCase() === String(n).trim().toLowerCase()) || n);
   }
 
   out.version = SCHEMA_VERSION;
@@ -484,9 +495,9 @@ export const SEED_MACHINES = [
 
 /* Exercises performed on one of those stacks, held as lowercased names. */
 export const SEED_STACK_EXERCISES = [
-  'triceps pushdown',
-  'overhead triceps extension',
-  'single-arm lat pulldown'
+  'Triceps Pushdown',
+  'Overhead Triceps Extension',
+  'Single-Arm Lat Pulldown'
 ];
 
 /* Reference first, then the order they were added. */
@@ -532,17 +543,29 @@ export function machineFactor(id) {
   return isCalibrated(m) ? (m.reference ? 1 : m.factor) : 1;
 }
 
-/* Is this exercise done on one of the calibrated stacks? */
+/* Is this exercise done on one of the calibrated stacks? Matching ignores case
+   and spacing so "Tricep Pushdowns" and "Triceps Pushdown" aren't two things. */
 export function usesStack(name) {
-  return (state.stackExercises || []).includes(String(name || '').trim().toLowerCase());
+  const key = stackKey(name);
+  return !!key && (state.stackExercises || []).some((n) => stackKey(n) === key);
+}
+
+function stackKey(name) {
+  return String(name || '').trim().toLowerCase().replace(/s+/g, ' ');
+}
+
+/* The list itself, exactly as written — this is what the Cables screen shows,
+   so an exercise you added stays listed whether or not it's in the library. */
+export function stackExerciseNames() {
+  return [...(state.stackExercises || [])];
 }
 
 export function setUsesStack(name, on) {
-  const key = String(name || '').trim().toLowerCase();
+  const key = stackKey(name);
   if (!key) return;
   const list = state.stackExercises || (state.stackExercises = []);
-  const i = list.indexOf(key);
-  if (on && i < 0) list.push(key);
+  const i = list.findIndex((n) => stackKey(n) === key);
+  if (on && i < 0) list.push(String(name).trim());
   if (!on && i >= 0) list.splice(i, 1);
   saveNow();
 }

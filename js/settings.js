@@ -2,7 +2,7 @@
 
 import {
   state, save, saveNow, exportJSON, importJSON, resetAll, hasSaveError,
-  sortedMachines, isCalibrated
+  sortedMachines, isCalibrated, BUILD
 } from './store.js';
 import { isDurable, canPersist, storageBackend, IS_FRAMED } from './storage.js';
 import { esc, icon, toast, toastSaveResult, confirmSheet, withBusy } from './ui.js';
@@ -98,7 +98,8 @@ export function renderSettings(view) {
 
     <div class="pad tiny muted center" style="padding:26px 26px 30px;line-height:1.6">
       PPL Tracker · all data stays on this device.<br>
-      Add to Home Screen for the full-screen app.
+      Add to Home Screen for the full-screen app.<br>
+      <span class="u-mono" style="font-size:11px;opacity:.7">build ${esc(BUILD)}</span>
     </div>
     <input type="file" id="import-file" accept="application/json,.json" hidden>
   `;
